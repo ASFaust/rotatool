@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Shifts</h1>
+<p>Manage shifts here.</p>
+
+<table class="shifts-table">
+    <thead>
+        <tr>
+            <th>Shift Name</th>
+            <th>Type</th>
+            <th>Day/Date</th>
+            <th>Start Time</th>
+            <th>End Time</th>
+            <th>Monitoring</th>
+            <th>PA</th>
+            <th>Other Area</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for shift in shifts %}
+        <tr>
+            <td>{{ shift.name }}</td>
+            <td>{{ 'Daily' if shift.is_daily else 'Weekly' if shift.weekly_day else 'One-time' }}</td>
+            <td>{{ shift.weekly_day if shift.weekly_day else shift.specific_date if shift.specific_date else 'N/A' }}</td>
+            <td>{{ shift.start_time }}</td>
+            <td>{{ shift.end_time }}</td>
+            <td>{{ 'Yes' if shift.monitoring else 'No' }}</td>
+            <td>{{ 'Yes' if shift.pa else 'No' }}</td>
+            <td>{{ 'Yes' if shift.other_area else 'No' }}</td>
+            <td>
+                <button type="button" class="edit-button" onclick="editShift('{{ shift.id }}', '{{ shift.name }}', '{{ shift.is_daily }}', '{{ shift.weekly_day }}', '{{ shift.specific_date }}', '{{ shift.start_time }}', '{{ shift.end_time }}', '{{ shift.monitoring }}', '{{ shift.pa }}', '{{ shift.other_area }}')">Edit</button>
+                <form action="/delete_shift/{{ shift.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
+                    <button type="submit" class="delete-button">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="editForm" style="display: none;">
+    <h3>Editing <span id="editShiftName"></span></h3>
+    <form id="editShiftForm" action="/edit_shift" method="POST">
+        <input type="hidden" id="editShiftId" name="id">
+        <table>
+            <tr>
+                <td><label for="editName">Name:</label></td>
+                <td><input type="text" id="editName" name="name"></td>
+            </tr>
+            <tr>
+                <td><label for="editType">Type:</label></td>
+                <td>
+                    <select id="editType" name="type" onchange="toggleDateFields()">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="one-time">One-time</option>
+                    </select>
+                </td>
+            </tr>
+            <tr id="editWeeklyDayRow">
+                <td><label for="editWeeklyDay">Weekly Day:</label></td>
+                <td>
+                    <select id="editWeeklyDay" name="weekly_day">
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                        <option value="Sunday">Sunday</option>
+                    </select>
+                </td>
+            </tr>
+            <tr id="editSpecificDateRow">
+                <td><label for="editSpecificDate">Specific Date:</label></td>
+                <td><input type="date" id="editSpecificDate" name="specific_date"></td>
+            </tr>
+            <tr>
+                <td><label for="editStartTime">Start Time:</label></td>
+                <td><input type="time" id="editStartTime" name="start_time"></td>
+            </tr>
+            <tr>
+                <td><label for="editEndTime">End Time:</label></td>
+                <td><input type="time" id="editEndTime" name="end_time"></td>
+            </tr>
+            <tr>
+                <td><label for="editMonitoring">Monitoring:</label></td>
+                <td><input type="checkbox" id="editMonitoring" name="monitoring"></td>
+            </tr>
+            <tr>
+                <td><label for="editPA">PA:</label></td>
+                <td><input type="checkbox" id="editPA" name="pa"></td>
+            </tr>
+            <tr>
+                <td><label for="editOtherArea">Other Area:</label></td>
+                <td><input type="checkbox" id="editOtherArea" name="other_area"></td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="submit">Save</button>
+                    <button type="button" onclick="cancelEdit()">Cancel</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+
+<form id="addShiftForm" action="/add_shift" method="POST">
+    <h3>Add Shift</h3>
+    <table>
+        <tr>
+            <td><label for="name">Name:</label></td>
+            <td><input type="text" name="name" required></td>
+        </tr>
+        <tr>
+            <td><label for="type">Type:</label></td>
+            <td>
+                <select name="type" onchange="toggleDateFields()">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="one-time">One-time</option>
+                </select>
+            </td>
+        </tr>
+        <tr id="weeklyDayRow">
+            <td><label for="weekly_day">Weekly Day:</label></td>
+            <td>
+                <select name="weekly_day">
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                    <option value="Saturday">Saturday</option>
+                    <option value="Sunday">Sunday</option>
+                </select>
+            </td>
+        </tr>
+        <tr id="specificDateRow">
+            <td><label for="specific_date">Specific Date:</label></td>
+            <td><input type="date" name="specific_date"></td>
+        </tr>
+        <tr>
+            <td><label for="start_time">Start Time:</label></td>
+            <td><input type="time" name="start_time" required></td>
+        </tr>
+        <tr>
+            <td><label for="end_time">End Time:</label></td>
+            <td><input type="time" name="end_time" required></td>
+        </tr>
+        <tr>
+            <td><label for="monitoring">Monitoring:</label></td>
+            <td><input type="checkbox" name="monitoring"></td>
+        </tr>
+        <tr>
+            <td><label for="pa">PA:</label></td>
+            <td><input type="checkbox" name="pa"></td>
+        </tr>
+        <tr>
+            <td><label for="other_area">Other Area:</label></td>
+            <td><input type="checkbox" name="other_area"></td>
+        </tr>
+        <tr>
+            <td colspan="2"><button type="submit">Add Shift</button></td>
+        </tr>
+    </table>
+</form>
+
+<script>
+function toggleDateFields() {
+    var type = document.querySelector('select[name="type"]').value;
+    document.getElementById('weeklyDayRow').style.display = type === 'weekly' ? 'table-row' : 'none';
+    document.getElementById('specificDateRow').style.display = type === 'one-time' ? 'table-row' : 'none';
+}
+
+function editShift(id, name, isDaily, weeklyDay, specificDate, startTime, endTime, monitoring, pa, otherArea) {
+    document.getElementById('editForm').style.display = 'block';
+    document.getElementById('addShiftForm').style.display = 'none';
+    document.getElementById('editShiftName').textContent = name;
+    document.getElementById('editShiftId').value = id;
+    document.getElementById('editName').value = name;
+    document.getElementById('editType').value = isDaily ? 'daily' : weeklyDay ? 'weekly' : 'one-time';
+    document.getElementById('editWeeklyDay').value = weeklyDay;
+    document.getElementById('editSpecificDate').value = specificDate;
+    document.getElementById('editStartTime').value = startTime;
+    document.getElementById('editEndTime').value = endTime;
+    document.getElementById('editMonitoring').checked = monitoring;
+    document.getElementById('editPA').checked = pa;
+    document.getElementById('editOtherArea').checked = otherArea;
+    toggleDateFields();
+}
+
+function cancelEdit() {
+    document.getElementById('editForm').style.display = 'none';
+    document.getElementById('addShiftForm').style.display = 'block';
+    document.getElementById('editShiftForm').reset();
+}
+
+function confirmDelete(event) {
+    if (!confirm("Do you really want to delete?")) {
+        event.preventDefault();
+    }
+}
+</script>
+{% endblock %}

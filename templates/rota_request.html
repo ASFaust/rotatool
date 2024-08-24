@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Rota Request (Fixed Shifts)</h1>
+<p>Enter fixed shifts here.</p>
+
+<!-- Add your form to enter fixed shifts -->
+<form action="/add_fixed_shift" method="POST">
+    <label for="shift">Shift:</label>
+    <input type="text" name="shift" required>
+    <label for="date">Date:</label>
+    <input type="date" name="date" required>
+    <button type="submit">Add Fixed Shift</button>
+</form>
+{% endblock %}
+

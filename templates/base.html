@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rota Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> <!-- Link to the CSS file -->
+</head>
+
+<body>
+
+    <!-- Navigation bar -->
+    <nav>
+        <a href="{{ url_for('main') }}">Main (Generate Rota)</a>
+        <a href="{{ url_for('rota_request') }}">Rota Request (Fixed Shifts)</a>
+        <a href="{{ url_for('people') }}">People</a>
+        <a href="{{ url_for('shifts') }}">Shifts</a>
+    </nav>
+
+    <!-- Content from individual pages -->
+    <div>
+        {% block content %}
+        {% endblock %}
+    </div>
+
+</body>
+</html>

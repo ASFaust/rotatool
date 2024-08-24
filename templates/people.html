@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>People</h1>
+<p>Manage people here.</p>
+
+<table class="people-table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Start Date</th>
+            <th>Leaving Date</th>
+            <th>Leader</th>
+            <th>Driver</th>
+            <th>Part Time</th>
+            <th>Duty Sheet Trained</th>
+            <th>MS Leader</th>
+            <th>Days Off Past</th>
+            <th>Days Off Total</th>
+            <th>Day Off Every</th>
+            <th>Actions</th> <!-- Extra column for buttons -->
+        </tr>
+    </thead>
+    <tbody>
+        {% for person in people %}
+        <tr>
+            <td>{{ person.name }}</td>
+            <td>{{ person.start_date }}</td>
+            <td>{{ person.leaving_date }}</td>
+            <td>{{ 'Yes' if person.leader else 'No' }}</td>
+            <td>{{ 'Yes' if person.driver else 'No' }}</td>
+            <td>{{ 'Yes' if person.is_part_time else 'No' }}</td>
+            <td>{{ 'Yes' if person.duty_sheet_trained else 'No' }}</td>
+            <td>{{ 'Yes' if person.ms_leader else 'No' }}</td>
+            <td>{{ person.days_off_past }}</td>
+            <td>{{ person.days_off_total }}</td>
+            <td>{{ person.day_off_every }}</td>
+            <td>
+                <button type="button" class="edit-button" onclick="editPerson('{{ person.id }}', '{{ person.name }}', '{{ person.start_date }}', '{{ person.leaving_date }}', {{ 'true' if person.leader else 'false' }}, {{ 'true' if person.is_part_time else 'false' }}, {{ person.days_off_past }}, {{ person.days_off_total }}, '{{ person.day_off_every }}', {{ 'true' if person.duty_sheet_trained else 'false' }}, {{ 'true' if person.ms_leader else 'false' }}, {{ 'true' if person.driver else 'false' }})">Edit</button>
+                <form action="/delete_person/{{ person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
+                    <button type="submit" class="delete-button">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="editForm" style="display: none;">
+    <h3>Editing <span id="editPersonName"></span></h3>
+    <form id="editPersonForm" action="/edit_person" method="POST">
+        <input type="hidden" id="editPersonId" name="id">
+        <table>
+            <tr>
+                <td><label for="editName">Name:</label></td>
+                <td><input type="text" id="editName" name="name"></td>
+            </tr>
+            <tr>
+                <td><label for="editStartDate">Start Date:</label></td>
+                <td><input type="date" id="editStartDate" name="start_date"></td>
+            </tr>
+            <tr>
+                <td><label for="editLeavingDate">Leaving Date:</label></td>
+                <td><input type="date" id="editLeavingDate" name="leaving_date"></td>
+            </tr>
+            <tr>
+                <td><label for="editLeader">Leader:</label></td>
+                <td><input type="checkbox" id="editLeader" name="leader"></td>
+            </tr>
+            <tr>
+                <td><label for="editPartTime">Part Time:</label></td>
+                <td><input type="checkbox" id="editPartTime" name="part_time"></td>
+            </tr>
+            <tr>
+                <td><label for="editDaysOffPast">Days Off Past:</label></td>
+                <td><input type="number" id="editDaysOffPast" name="days_off_past"></td>
+            </tr>
+            <tr>
+                <td><label for="editDaysOffTotal">Days Off Total:</label></td>
+                <td><input type="number" id="editDaysOffTotal" name="days_off_total"></td>
+            </tr>
+            <tr>
+                <td><label for="editDayOffEvery">Day Off Every:</label></td>
+                <td><input type="number" id="editDayOffEvery" name="day_off_every"></td>
+            </tr>
+            <tr>
+                <td><label for="editDutySheetTrained">Duty Sheet Trained:</label></td>
+                <td><input type="checkbox" id="editDutySheetTrained" name="duty_sheet_trained"></td>
+            </tr>
+            <tr>
+                <td><label for="editMSLeader">MS Leader:</label></td>
+                <td><input type="checkbox" id="editMSLeader" name="ms_leader"></td>
+            </tr>
+            <tr>
+                <td><label for="editDriver">Driver:</label></td>
+                <td><input type="checkbox" id="editDriver" name="driver"></td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="submit">Save</button>
+                    <button type="button" onclick="cancelEdit()">Cancel</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+<script>
+function editPerson(id, name, startDate, leavingDate, leader, partTime, daysOffPast, daysOffTotal, dayOffEvery, dutySheetTrained, msLeader, driver) {
+    // Show the edit form
+    document.getElementById('editForm').style.display = 'block';
+
+    // Hide the add person form
+    document.getElementById('addPersonForm').style.display = 'none';
+
+    // Set the person's name in the edit form
+    document.getElementById('editPersonName').textContent = name;
+
+    // Populate the form with the person's data
+    document.getElementById('editPersonId').value = id;
+    document.getElementById('editName').value = name;
+    document.getElementById('editStartDate').value = startDate;
+    document.getElementById('editLeavingDate').value = leavingDate;
+    document.getElementById('editLeader').checked = leader;
+    document.getElementById('editPartTime').checked = partTime;
+    document.getElementById('editDaysOffPast').value = daysOffPast;
+    document.getElementById('editDaysOffTotal').value = daysOffTotal;
+    document.getElementById('editDayOffEvery').value = dayOffEvery;
+    document.getElementById('editDutySheetTrained').checked = dutySheetTrained;
+    document.getElementById('editMSLeader').checked = msLeader;
+    document.getElementById('editDriver').checked = driver;
+}
+
+function cancelEdit() {
+    // Hide the edit form
+    document.getElementById('editForm').style.display = 'none';
+
+    // Show the add person form
+    document.getElementById('addPersonForm').style.display = 'block';
+
+    // Optionally reset the form fields
+    document.getElementById('editPersonForm').reset();
+}
+
+function confirmDelete(event) {
+    if (!confirm("Do you really want to delete?")) {
+        event.preventDefault();
+    }
+}
+</script>
+
+<form id="addPersonForm" action="/add_person" method="POST">
+    <h3>Add Person</h3>
+    <table>
+        <tr>
+            <td><label for="name">Name:</label></td>
+            <td><input type="text" name="name" required></td>
+        </tr>
+        <tr>
+            <td><label for="start_date">Start Date:</label></td>
+            <td><input type="date" name="start_date" required></td>
+        </tr>
+        <tr>
+            <td><label for="leaving_date">Leaving Date:</label></td>
+            <td><input type="date" name="leaving_date" required></td>
+        </tr>
+        <tr>
+            <td><label for="leader">Leader:</label></td>
+            <td><input type="checkbox" name="leader"></td>
+        </tr>
+        <tr>
+            <td><label for="part_time">Part Time:</label></td>
+            <td><input type="checkbox" name="part_time"></td>
+        </tr>
+        <tr>
+            <td><label for="day_off_every">Day Off Every:</label></td>
+            <td><input type="number" name="day_off_every" value="10" required></td>
+        </tr>
+        <tr>
+            <td><label for="duty_sheet_trained">Duty Sheet Trained:</label></td>
+            <td><input type="checkbox" name="duty_sheet_trained"></td>
+        </tr>
+        <tr>
+            <td><label for="ms_leader">MS Leader:</label></td>
+            <td><input type="checkbox" name="ms_leader"></td>
+        </tr>
+        <tr>
+            <td><label for="driver">Driver:</label></td>
+            <td><input type="checkbox" name="driver"></td>
+        </tr>
+        <tr>
+            <td colspan="2"><button type="submit">Add Person</button></td>
+        </tr>
+    </table>
+</form>
+{% endblock %}
+

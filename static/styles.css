@@ -1,0 +1,171 @@
+/* General Styling */
+body {
+    font-family: Arial, sans-serif; /* Use a non-serif font */
+}
+
+/* Navigation Bar Styling */
+nav {
+    background-color: #007bff;
+    padding: 10px;
+}
+
+nav a {
+    color: white;
+    text-decoration: none;
+    margin-right: 15px;
+    padding: 10px;
+    border-radius: 3px;
+}
+
+nav a:hover {
+    background-color: #0056b3;
+}
+
+/* Form Styling */
+form {
+    max-width: 400px;
+    margin: 0; /* Align form to the left */
+}
+
+form table {
+    width: auto; /* Adjust width based on content */
+    margin-right: auto; /* Align table to the left */
+}
+
+form td {
+    padding: 5px;
+}
+
+form label {
+    display: block;
+}
+
+form input[type="text"],
+form input[type="date"],
+form input[type="number"],
+form select {
+    width: 100%;
+    padding: 5px;
+}
+
+form input[type="checkbox"] {
+    margin-left: 10px;
+}
+
+form button {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+form button:hover {
+    background-color: #0056b3;
+}
+
+/* Main Table Styling */
+table.people-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    margin-right: auto; /* Align table to the left */
+}
+
+table.people-table th, table.people-table td {
+    border: 1px solid #dddddd;
+    text-align: left;
+    padding: 8px;
+}
+
+/* Table Header Styling */
+table.people-table th {
+    background-color: #f2f2f2;
+}
+
+/* Alternating Row Colors */
+table.people-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* Align Buttons to the Left */
+table.people-table tbody tr td:last-child {
+    display: flex;
+    justify-content: flex-start; /* Align buttons to the left */
+}
+
+/* Button Styling */
+button {
+    margin-left: 10px;
+    padding: 5px 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    aspect-ratio: 2 / 1; /* Explicitly set aspect ratio */
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+/* Specific Button Styling for Edit and Delete */
+button.edit-button,
+button.delete-button {
+    margin-left: 10px;
+    padding: 5px 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px; /* Add font-size for consistency */
+    display: inline-block; /* Ensure both are displayed inline */
+    aspect-ratio: 4 / 1; /* Explicitly set aspect ratio */
+}
+
+button.edit-button:hover,
+button.delete-button:hover {
+    background-color: #0056b3;
+}
+
+/* Reset form and button padding to ensure consistency in styling */
+form {
+    margin: 0;
+    padding: 0;
+    display: inline;
+}
+
+form button {
+    font-family: inherit; /* Inherit font styling for consistency */
+    padding: 5px 10px; /* Same padding for both buttons */
+}
+
+/* Shifts Table Styling */
+table.shifts-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+table.shifts-table th, table.shifts-table td {
+    border: 1px solid #dddddd;
+    text-align: left;
+    padding: 8px;
+}
+
+table.shifts-table th {
+    background-color: #f2f2f2;
+}
+
+table.shifts-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+table.shifts-table tbody tr td:last-child {
+    display: flex;
+    justify-content: flex-start;
+}

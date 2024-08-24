@@ -1,0 +1,59 @@
+# Ignore Flask and Flask-SQLAlchemy stuff
+instance/*.db
+instance/*.pyc
+
+# Ignore PyCharm files
+.idea/
+
+# Ignore virtual environments
+venv/
+.env/
+
+# Ignore standard Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
+
+# Ignore macOS system files
+.DS_Store
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+
+# Ignore test and debug output files
+pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# Ignore temporary files and editors' backup files
+*.swp
+*.swo
+*.bak
+*.tmp
+*.~
+*.orig
+
+# Ignore distributions and wheels
+*.whl
+
+# Ignore pip environment files
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Ignore mypy type checker files
+.mypy_cache/
+.dmypy.json
+dmypy.json
