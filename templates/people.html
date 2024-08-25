@@ -1,3 +1,4 @@
+<!-- templates/people.html -->
 {% extends 'base.html' %}
 
 {% block content %}
@@ -37,7 +38,7 @@
             <td>{{ person.day_off_every }}</td>
             <td>
                 <button type="button" class="edit-button" onclick="editPerson('{{ person.id }}', '{{ person.name }}', '{{ person.start_date }}', '{{ person.leaving_date }}', {{ 'true' if person.leader else 'false' }}, {{ 'true' if person.is_part_time else 'false' }}, {{ person.days_off_past }}, {{ person.days_off_total }}, '{{ person.day_off_every }}', {{ 'true' if person.duty_sheet_trained else 'false' }}, {{ 'true' if person.ms_leader else 'false' }}, {{ 'true' if person.driver else 'false' }})">Edit</button>
-                <form action="/delete_person/{{ person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
+                <form action="/people/delete_person/{{ person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
                     <button type="submit" class="delete-button">Delete</button>
                 </form>
             </td>
@@ -48,7 +49,7 @@
 
 <div id="editForm" style="display: none;">
     <h3>Editing <span id="editPersonName"></span></h3>
-    <form id="editPersonForm" action="/edit_person" method="POST">
+    <form id="editPersonForm" action="/people/edit_person" method="POST">
         <input type="hidden" id="editPersonId" name="id">
         <table>
             <tr>
@@ -148,7 +149,7 @@ function confirmDelete(event) {
 }
 </script>
 
-<form id="addPersonForm" action="/add_person" method="POST">
+<form id="addPersonForm" action="/people/add_person" method="POST">
     <h3>Add Person</h3>
     <table>
         <tr>
@@ -193,4 +194,3 @@ function confirmDelete(event) {
     </table>
 </form>
 {% endblock %}
-

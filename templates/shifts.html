@@ -8,8 +8,8 @@
     <thead>
         <tr>
             <th>Shift Name</th>
-            <th>Type</th>
-            <th>Day/Date</th>
+            <th>Every Day?</th>
+            <th>Day of the Week</th>
             <th>Start Time</th>
             <th>End Time</th>
             <th>Monitoring</th>
@@ -22,15 +22,15 @@
         {% for shift in shifts %}
         <tr>
             <td>{{ shift.name }}</td>
-            <td>{{ 'Daily' if shift.is_daily else 'Weekly' if shift.weekly_day else 'One-time' }}</td>
-            <td>{{ shift.weekly_day if shift.weekly_day else shift.specific_date if shift.specific_date else 'N/A' }}</td>
+            <td>{{ 'Yes' if shift.is_daily else 'No'}}</td>
+            <td>{{ shift.day_of_the_week if shift.day_of_the_week else 'N/A' }}</td>
             <td>{{ shift.start_time }}</td>
             <td>{{ shift.end_time }}</td>
             <td>{{ 'Yes' if shift.monitoring else 'No' }}</td>
             <td>{{ 'Yes' if shift.pa else 'No' }}</td>
             <td>{{ 'Yes' if shift.other_area else 'No' }}</td>
             <td>
-                <button type="button" class="edit-button" onclick="editShift('{{ shift.id }}', '{{ shift.name }}', '{{ shift.is_daily }}', '{{ shift.weekly_day }}', '{{ shift.specific_date }}', '{{ shift.start_time }}', '{{ shift.end_time }}', '{{ shift.monitoring }}', '{{ shift.pa }}', '{{ shift.other_area }}')">Edit</button>
+                <button type="button" class="edit-button" onclick="editShift('{{ shift.id }}', '{{ shift.name }}', {{ 'true' if shift.is_daily else 'false' }}, '{{ shift.day_of_the_week }}', '{{ shift.start_time }}', '{{ shift.end_time }}', {{ 'true' if shift.monitoring else 'false' }}, {{ 'true' if shift.pa else 'false' }}, {{ 'true' if shift.other_area else 'false' }})">Edit</button>
                 <form action="/delete_shift/{{ shift.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
                     <button type="submit" class="delete-button">Delete</button>
                 </form>
@@ -50,32 +50,12 @@
                 <td><input type="text" id="editName" name="name"></td>
             </tr>
             <tr>
-                <td><label for="editType">Type:</label></td>
-                <td>
-                    <select id="editType" name="type" onchange="toggleDateFields()">
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="one-time">One-time</option>
-                    </select>
-                </td>
+                <td><label for="editIsDaily">Daily:</label></td>
+                <td><input type="checkbox" id="editIsDaily" name="is_daily" onchange="toggleDateFields()"></td>
             </tr>
-            <tr id="editWeeklyDayRow">
-                <td><label for="editWeeklyDay">Weekly Day:</label></td>
-                <td>
-                    <select id="editWeeklyDay" name="weekly_day">
-                        <option value="Monday">Monday</option>
-                        <option value="Tuesday">Tuesday</option>
-                        <option value="Wednesday">Wednesday</option>
-                        <option value="Thursday">Thursday</option>
-                        <option value="Friday">Friday</option>
-                        <option value="Saturday">Saturday</option>
-                        <option value="Sunday">Sunday</option>
-                    </select>
-                </td>
-            </tr>
-            <tr id="editSpecificDateRow">
-                <td><label for="editSpecificDate">Specific Date:</label></td>
-                <td><input type="date" id="editSpecificDate" name="specific_date"></td>
+            <tr>
+                <td><label for="editDayOfTheWeek">Day of the Week:</label></td>
+                <td><input type="text" id="editDayOfTheWeek" name="day_of_the_week"></td>
             </tr>
             <tr>
                 <td><label for="editStartTime">Start Time:</label></td>
@@ -115,32 +95,12 @@
             <td><input type="text" name="name" required></td>
         </tr>
         <tr>
-            <td><label for="type">Type:</label></td>
-            <td>
-                <select name="type" onchange="toggleDateFields()">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="one-time">One-time</option>
-                </select>
-            </td>
+            <td><label for="is_daily">Daily:</label></td>
+            <td><input type="checkbox" name="is_daily" onchange="toggleDateFields()"></td>
         </tr>
-        <tr id="weeklyDayRow">
-            <td><label for="weekly_day">Weekly Day:</label></td>
-            <td>
-                <select name="weekly_day">
-                    <option value="Monday">Monday</option>
-                    <option value="Tuesday">Tuesday</option>
-                    <option value="Wednesday">Wednesday</option>
-                    <option value="Thursday">Thursday</option>
-                    <option value="Friday">Friday</option>
-                    <option value="Saturday">Saturday</option>
-                    <option value="Sunday">Sunday</option>
-                </select>
-            </td>
-        </tr>
-        <tr id="specificDateRow">
-            <td><label for="specific_date">Specific Date:</label></td>
-            <td><input type="date" name="specific_date"></td>
+        <tr>
+            <td><label for="day_of_the_week">Day of the Week:</label></td>
+            <td><input type="text" name="day_of_the_week"></td>
         </tr>
         <tr>
             <td><label for="start_time">Start Time:</label></td>
@@ -170,20 +130,20 @@
 
 <script>
 function toggleDateFields() {
-    var type = document.querySelector('select[name="type"]').value;
-    document.getElementById('weeklyDayRow').style.display = type === 'weekly' ? 'table-row' : 'none';
-    document.getElementById('specificDateRow').style.display = type === 'one-time' ? 'table-row' : 'none';
+    var isDaily = document.querySelector('input[name="is_daily"]').checked;
+    var dayOfTheWeekInput = document.querySelector('input[name="day_of_the_week"]');
+    dayOfTheWeekInput.disabled = isDaily;
+    dayOfTheWeekInput.style.backgroundColor = isDaily ? '#e9ecef' : '';
 }
 
-function editShift(id, name, isDaily, weeklyDay, specificDate, startTime, endTime, monitoring, pa, otherArea) {
+function editShift(id, name, isDaily, dayOfTheWeek, startTime, endTime, monitoring, pa, otherArea) {
     document.getElementById('editForm').style.display = 'block';
     document.getElementById('addShiftForm').style.display = 'none';
     document.getElementById('editShiftName').textContent = name;
     document.getElementById('editShiftId').value = id;
     document.getElementById('editName').value = name;
-    document.getElementById('editType').value = isDaily ? 'daily' : weeklyDay ? 'weekly' : 'one-time';
-    document.getElementById('editWeeklyDay').value = weeklyDay;
-    document.getElementById('editSpecificDate').value = specificDate;
+    document.getElementById('editIsDaily').checked = isDaily;
+    document.getElementById('editDayOfTheWeek').value = dayOfTheWeek;
     document.getElementById('editStartTime').value = startTime;
     document.getElementById('editEndTime').value = endTime;
     document.getElementById('editMonitoring').checked = monitoring;

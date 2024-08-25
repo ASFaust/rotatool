@@ -1,21 +1,20 @@
+<!-- templates/base.html -->
 <!DOCTYPE html>
 <html>
 <head>
     <title>Rota Tool</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> <!-- Link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 
 <body>
 
-    <!-- Navigation bar -->
     <nav>
-        <a href="{{ url_for('main') }}">Main (Generate Rota)</a>
-        <a href="{{ url_for('rota_request') }}">Rota Request (Fixed Shifts)</a>
-        <a href="{{ url_for('people') }}">People</a>
-        <a href="{{ url_for('shifts') }}">Shifts</a>
+        <a href="{{ url_for('main.main') }}">Main (Generate Rota)</a>
+        <a href="{{ url_for('rota.rota_request') }}">Rota Request (Fixed Shifts)</a>
+        <a href="{{ url_for('people.people') }}">People</a>
+        <a href="{{ url_for('shifts.add_shift') }}">Shifts</a>
     </nav>
 
-    <!-- Content from individual pages -->
     <div>
         {% block content %}
         {% endblock %}
