@@ -158,6 +158,17 @@ def add_constraints(prob, persons, all_shifts, x, max_shifts, morning_survey_max
         prob += morning_survey_max_shifts >= morning_survey_count
         prob += morning_survey_min_shifts <= morning_survey_count
 
+    # Minimize number of consecutive Morning Surveys for one person
+    for person in persons:
+        for shift1 in all_shifts:
+            if shift1['shift'].type == "Morning Survey":
+                for shift2 in all_shifts:
+                    if shift1['id'] == shift2['id']:
+                        continue
+                    total_days = (shift2['start_time'] - shift1['start_time']).total_seconds() / 86400
+                    if 0.8 < total_days < 1.2:
+                        prob += x[person.id, shift1['id']] + x[person.id, shift2['id']] <= 1
+
 def set_objective(prob, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts):
     prob.setObjective(max_shifts + (morning_survey_max_shifts - morning_survey_min_shifts))
 def solve_ilp():
