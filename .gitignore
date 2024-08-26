@@ -2,6 +2,9 @@
 instance/*.db
 instance/*.pyc
 
+#ignore migrations
+migrations/
+
 # Ignore PyCharm files
 .idea/
 

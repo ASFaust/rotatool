@@ -1,0 +1,49 @@
+<!-- templates/skills.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Skills</h1>
+<p>Manage skills here.</p>
+
+<table class="skills-table">
+    <thead>
+        <tr>
+            <th>Skill Name</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for skill in skills %}
+        <tr>
+            <td>{{ skill.name }}</td>
+            <td>
+                <form action="/skills/delete_skill/{{ skill.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
+                    <button type="submit" class="delete-button">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<form id="addSkillForm" action="/skills/add_skill" method="POST">
+    <h3>Add Skill</h3>
+    <table>
+        <tr>
+            <td><label for="name">Name:</label></td>
+            <td><input type="text" name="name" required></td>
+        </tr>
+        <tr>
+            <td colspan="2"><button type="submit">Add Skill</button></td>
+        </tr>
+    </table>
+</form>
+
+<script>
+function confirmDelete(event) {
+    if (!confirm("Do you really want to delete?")) {
+        event.preventDefault();
+    }
+}
+</script>
+{% endblock %}

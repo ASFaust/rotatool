@@ -8,30 +8,28 @@
     <thead>
         <tr>
             <th>Shift Name</th>
-            <th>Every Day?</th>
-            <th>Day of the Week</th>
+            <th>Day</th>
             <th>Start Time</th>
             <th>End Time</th>
-            <th>Monitoring</th>
-            <th>PA</th>
-            <th>Other Area</th>
+            <th>Type</th>
+            <th>Number of People</th>
+            <th>Skills Required</th>
             <th>Actions</th>
         </tr>
     </thead>
     <tbody>
-        {% for shift in shifts %}
+        {% for item in shifts %}
         <tr>
-            <td>{{ shift.name }}</td>
-            <td>{{ 'Yes' if shift.is_daily else 'No'}}</td>
-            <td>{{ shift.day_of_the_week if shift.day_of_the_week else 'N/A' }}</td>
-            <td>{{ shift.start_time }}</td>
-            <td>{{ shift.end_time }}</td>
-            <td>{{ 'Yes' if shift.monitoring else 'No' }}</td>
-            <td>{{ 'Yes' if shift.pa else 'No' }}</td>
-            <td>{{ 'Yes' if shift.other_area else 'No' }}</td>
+            <td>{{ item.shift.name }}</td>
+            <td>{{ item.shift.day_of_the_week }}</td>
+            <td>{{ item.shift.start_time }}</td>
+            <td>{{ item.shift.end_time }}</td>
+            <td>{{ item.shift.type }}</td>
+            <td>{{ item.shift.number_of_people }}</td>
+            <td>{{ item.skills | join(', ') }}</td>
             <td>
-                <button type="button" class="edit-button" onclick="editShift('{{ shift.id }}', '{{ shift.name }}', {{ 'true' if shift.is_daily else 'false' }}, '{{ shift.day_of_the_week }}', '{{ shift.start_time }}', '{{ shift.end_time }}', {{ 'true' if shift.monitoring else 'false' }}, {{ 'true' if shift.pa else 'false' }}, {{ 'true' if shift.other_area else 'false' }})">Edit</button>
-                <form action="/delete_shift/{{ shift.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
+                <button type="button" class="edit-button" onclick="editShift('{{ item.shift.id }}')">Edit</button>
+                <form action="/shifts/delete_shift/{{ item.shift.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
                     <button type="submit" class="delete-button">Delete</button>
                 </form>
             </td>
@@ -42,40 +40,66 @@
 
 <div id="editForm" style="display: none;">
     <h3>Editing <span id="editShiftName"></span></h3>
-    <form id="editShiftForm" action="/edit_shift" method="POST">
+    <form id="editShiftForm" action="{{ url_for('shifts.edit_shift') }}" method="POST">
         <input type="hidden" id="editShiftId" name="id">
         <table>
             <tr>
                 <td><label for="editName">Name:</label></td>
-                <td><input type="text" id="editName" name="name"></td>
+                <td><input type="text" id="editName" name="name" required></td>
             </tr>
             <tr>
-                <td><label for="editIsDaily">Daily:</label></td>
-                <td><input type="checkbox" id="editIsDaily" name="is_daily" onchange="toggleDateFields()"></td>
-            </tr>
-            <tr>
-                <td><label for="editDayOfTheWeek">Day of the Week:</label></td>
-                <td><input type="text" id="editDayOfTheWeek" name="day_of_the_week"></td>
+                <td><label for="editDayOfTheWeek">Day:</label></td>
+                <td>
+                    <select id="editDayOfTheWeek" name="day_of_the_week">
+                        <option value="Every Day">Every Day</option>
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                        <option value="Sunday">Sunday</option>
+                    </select>
+                </td>
             </tr>
             <tr>
                 <td><label for="editStartTime">Start Time:</label></td>
-                <td><input type="time" id="editStartTime" name="start_time"></td>
+                <td><input type="time" id="editStartTime" name="start_time" required></td>
             </tr>
             <tr>
                 <td><label for="editEndTime">End Time:</label></td>
-                <td><input type="time" id="editEndTime" name="end_time"></td>
+                <td><input type="time" id="editEndTime" name="end_time" required></td>
             </tr>
             <tr>
-                <td><label for="editMonitoring">Monitoring:</label></td>
-                <td><input type="checkbox" id="editMonitoring" name="monitoring"></td>
+                <td><label for="editType">Type:</label></td>
+                <td>
+                    <select id="editType" name="type" required>
+                        <option value="Morning Survey">Morning Survey</option>
+                        <option value="Night Survey">Night Survey</option>
+                        <option value="Slideshow">Slideshow</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </td>
             </tr>
             <tr>
-                <td><label for="editPA">PA:</label></td>
-                <td><input type="checkbox" id="editPA" name="pa"></td>
+                <td><label for="editNumberOfPeople">Number of People:</label></td>
+                <td><input type="number" id="editNumberOfPeople" name="number_of_people" required min="1" value="1"></td>
             </tr>
             <tr>
-                <td><label for="editOtherArea">Other Area:</label></td>
-                <td><input type="checkbox" id="editOtherArea" name="other_area"></td>
+                <td style="vertical-align: top;"><label for="editSkills">Required Skills:</label></td>
+                <td>
+                    <div id="editSkillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
+                        <!-- Existing skills will be displayed here -->
+                    </div>
+                    <div id="editNewSkillContainer" style="display: flex; align-items: center;">
+                        <select id="editNewSkillSelect">
+                            {% for skill in skills %}
+                            <option value="{{ skill.id }}">{{ skill.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" onclick="addEditSkill()" style="margin-left: 10px;">Add Skill</button>
+                    </div>
+                </td>
             </tr>
             <tr>
                 <td colspan="2">
@@ -87,7 +111,7 @@
     </form>
 </div>
 
-<form id="addShiftForm" action="/add_shift" method="POST">
+<form id="addShiftForm" action="{{ url_for('shifts.add_shift') }}" method="POST">
     <h3>Add Shift</h3>
     <table>
         <tr>
@@ -95,12 +119,19 @@
             <td><input type="text" name="name" required></td>
         </tr>
         <tr>
-            <td><label for="is_daily">Daily:</label></td>
-            <td><input type="checkbox" name="is_daily" onchange="toggleDateFields()"></td>
-        </tr>
-        <tr>
-            <td><label for="day_of_the_week">Day of the Week:</label></td>
-            <td><input type="text" name="day_of_the_week"></td>
+            <td><label for="day_of_the_week">Day:</label></td>
+            <td>
+                <select name="day_of_the_week">
+                    <option value="Every Day">Every Day</option>
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                    <option value="Saturday">Saturday</option>
+                    <option value="Sunday">Sunday</option>
+                </select>
+            </td>
         </tr>
         <tr>
             <td><label for="start_time">Start Time:</label></td>
@@ -111,16 +142,35 @@
             <td><input type="time" name="end_time" required></td>
         </tr>
         <tr>
-            <td><label for="monitoring">Monitoring:</label></td>
-            <td><input type="checkbox" name="monitoring"></td>
+            <td><label for="type">Type:</label></td>
+            <td>
+                <select name="type" required>
+                    <option value="Morning Survey">Morning Survey</option>
+                    <option value="Night Survey">Night Survey</option>
+                    <option value="Slideshow">Slideshow</option>
+                    <option value="Other">Other</option>
+                </select>
+            </td>
         </tr>
         <tr>
-            <td><label for="pa">PA:</label></td>
-            <td><input type="checkbox" name="pa"></td>
+            <td><label for="number_of_people">Number of People:</label></td>
+            <td><input type="number" name="number_of_people" id="number_of_people" required min="1" value="1"></td>
         </tr>
         <tr>
-            <td><label for="other_area">Other Area:</label></td>
-            <td><input type="checkbox" name="other_area"></td>
+            <td style="vertical-align: top;"><label for="skills">Required Skills:</label></td>
+            <td>
+                <div id="skillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
+                    <!-- Existing skills will be displayed here -->
+                </div>
+                <div id="newSkillContainer" style="display: flex; align-items: center;">
+                    <select id="newSkillSelect">
+                        {% for skill in skills %}
+                        <option value="{{ skill.id }}">{{ skill.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" onclick="addSkill()" style="margin-left: 10px;">Add Skill</button>
+                </div>
+            </td>
         </tr>
         <tr>
             <td colspan="2"><button type="submit">Add Shift</button></td>
@@ -129,27 +179,117 @@
 </form>
 
 <script>
-function toggleDateFields() {
-    var isDaily = document.querySelector('input[name="is_daily"]').checked;
-    var dayOfTheWeekInput = document.querySelector('input[name="day_of_the_week"]');
-    dayOfTheWeekInput.disabled = isDaily;
-    dayOfTheWeekInput.style.backgroundColor = isDaily ? '#e9ecef' : '';
+function addSkill() {
+    var select = document.getElementById('newSkillSelect');
+    var selectedSkillId = select.value;
+    var selectedSkillName = select.options[select.selectedIndex].text;
+
+    var container = document.getElementById('skillsContainer');
+    var skillDiv = document.createElement('div');
+    skillDiv.className = 'skill-item';
+    skillDiv.dataset.skillId = selectedSkillId;
+
+    var skillNameSpan = document.createElement('span');
+    skillNameSpan.textContent = selectedSkillName;
+    skillDiv.appendChild(skillNameSpan);
+
+    var removeButton = document.createElement('span');
+    removeButton.textContent = ' x';
+    removeButton.style.cursor = 'pointer';
+    removeButton.style.color = 'red';
+    removeButton.style.marginLeft = '5px';
+    removeButton.onclick = function() {
+        container.removeChild(skillDiv);
+    };
+    skillDiv.appendChild(removeButton);
+
+    var hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.name = 'skills';
+    hiddenInput.value = selectedSkillId;
+    skillDiv.appendChild(hiddenInput);
+
+    container.appendChild(skillDiv);
 }
 
-function editShift(id, name, isDaily, dayOfTheWeek, startTime, endTime, monitoring, pa, otherArea) {
-    document.getElementById('editForm').style.display = 'block';
-    document.getElementById('addShiftForm').style.display = 'none';
-    document.getElementById('editShiftName').textContent = name;
-    document.getElementById('editShiftId').value = id;
-    document.getElementById('editName').value = name;
-    document.getElementById('editIsDaily').checked = isDaily;
-    document.getElementById('editDayOfTheWeek').value = dayOfTheWeek;
-    document.getElementById('editStartTime').value = startTime;
-    document.getElementById('editEndTime').value = endTime;
-    document.getElementById('editMonitoring').checked = monitoring;
-    document.getElementById('editPA').checked = pa;
-    document.getElementById('editOtherArea').checked = otherArea;
-    toggleDateFields();
+function addEditSkill() {
+    var select = document.getElementById('editNewSkillSelect');
+    var selectedSkillId = select.value;
+    var selectedSkillName = select.options[select.selectedIndex].text;
+
+    var container = document.getElementById('editSkillsContainer');
+    var skillDiv = document.createElement('div');
+    skillDiv.className = 'skill-item';
+    skillDiv.dataset.skillId = selectedSkillId;
+
+    var skillNameSpan = document.createElement('span');
+    skillNameSpan.textContent = selectedSkillName;
+    skillDiv.appendChild(skillNameSpan);
+
+    var removeButton = document.createElement('span');
+    removeButton.textContent = ' x';
+    removeButton.style.cursor = 'pointer';
+    removeButton.style.color = 'red';
+    removeButton.style.marginLeft = '5px';
+    removeButton.onclick = function() {
+        container.removeChild(skillDiv);
+    };
+    skillDiv.appendChild(removeButton);
+
+    var hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.name = 'skills';
+    hiddenInput.value = selectedSkillId;
+    skillDiv.appendChild(hiddenInput);
+
+    container.appendChild(skillDiv);
+}
+
+function editShift(id) {
+    fetch(`/shifts/get_shift/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('editForm').style.display = 'block';
+            document.getElementById('addShiftForm').style.display = 'none';
+            document.getElementById('editShiftName').textContent = data.name;
+            document.getElementById('editShiftId').value = data.id;
+            document.getElementById('editName').value = data.name;
+            document.getElementById('editDayOfTheWeek').value = data.day_of_the_week;
+            document.getElementById('editStartTime').value = data.start_time;
+            document.getElementById('editEndTime').value = data.end_time;
+            document.getElementById('editType').value = data.type;
+            document.getElementById('editNumberOfPeople').value = data.number_of_people;
+
+            var container = document.getElementById('editSkillsContainer');
+            container.innerHTML = '';
+            data.skills.forEach(function(skill) {
+                var skillDiv = document.createElement('div');
+                skillDiv.className = 'skill-item';
+                skillDiv.dataset.skillId = skill.id;
+
+                var skillNameSpan = document.createElement('span');
+                skillNameSpan.textContent = skill.name;
+                skillDiv.appendChild(skillNameSpan);
+
+                var removeButton = document.createElement('span');
+                removeButton.textContent = ' x';
+                removeButton.style.cursor = 'pointer';
+                removeButton.style.color = 'red';
+                removeButton.style.marginLeft = '5px';
+                removeButton.onclick = function() {
+                    container.removeChild(skillDiv);
+                };
+                skillDiv.appendChild(removeButton);
+
+                var hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'skills';
+                hiddenInput.value = skill.id;
+                skillDiv.appendChild(hiddenInput);
+
+                container.appendChild(skillDiv);
+            });
+        });
 }
 
 function cancelEdit() {
