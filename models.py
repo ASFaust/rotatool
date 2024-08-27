@@ -13,6 +13,7 @@ class Person(db.Model):
     day_off_every = db.Column(db.Integer, default=10, nullable=False)
     days_off_past = db.Column(db.Integer, default=0)
     days_off_total = db.Column(db.Integer, default=0)
+    activated = db.Column(db.Boolean, default=True)  # New field
 
 class Shift(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -21,7 +22,9 @@ class Shift(db.Model):
     start_time = db.Column(db.Time, nullable=False)
     end_time = db.Column(db.Time, nullable=False)
     type = db.Column(db.String(20), nullable=False)
-    number_of_people = db.Column(db.Integer, nullable=False, default=1)  # New field
+    number_of_people = db.Column(db.Integer, nullable=False, default=1)
+    optional = db.Column(db.Boolean, default=False)
+    activated = db.Column(db.Boolean, default=True)  # New field
 
 class Skill(db.Model):
     id = db.Column(db.Integer, primary_key=True)

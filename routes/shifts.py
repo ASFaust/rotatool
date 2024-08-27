@@ -7,11 +7,11 @@ shifts_bp = Blueprint('shifts', __name__, url_prefix='/shifts')
 
 @shifts_bp.route('/', methods=['GET'], endpoint='shifts')
 def shifts():
-    shifts = Shift.query.all()
-    skills = Skill.query.all()
+    shifts = Shift.query.order_by(Shift.name).all()
+    skills = Skill.query.order_by(Skill.name).all()
     shifts_with_skills = []
     for shift in shifts:
-        shift_skills = [ss.skill.name for ss in shift.shift_skills]
+        shift_skills = [ss.skill.name for ss in sorted(shift.shift_skills, key=lambda ss: ss.skill.name)]
         shifts_with_skills.append({
             'shift': shift,
             'skills': shift_skills
@@ -31,7 +31,9 @@ def get_shift(shift_id):
             'end_time': shift.end_time.strftime('%H:%M'),
             'type': shift.type,
             'number_of_people': shift.number_of_people,
-            'skills': shift_skills
+            'skills': shift_skills,
+            'optional': shift.optional,
+            'activated': shift.activated
         }
         return jsonify(shift_data)
     return jsonify({'error': 'Shift not found'}), 404
@@ -45,6 +47,7 @@ def add_shift():
         end_time = datetime.strptime(request.form['end_time'], '%H:%M').time()
         type = request.form['type']
         number_of_people = int(request.form['number_of_people'])
+        optional = 'optional' in request.form
 
         new_shift = Shift(
             name=name,
@@ -52,8 +55,11 @@ def add_shift():
             start_time=start_time,
             end_time=end_time,
             type=type,
-            number_of_people=number_of_people
+            number_of_people=number_of_people,
+            optional=optional,
+            activated=True
         )
+
         db.session.add(new_shift)
         db.session.commit()
 
@@ -80,6 +86,7 @@ def edit_shift():
         shift.end_time = datetime.strptime(request.form['end_time'], '%H:%M').time()
         shift.type = request.form['type']
         shift.number_of_people = int(request.form['number_of_people'])
+        shift.optional = 'optional' in request.form
 
         # Update skills
         skill_ids = request.form.getlist('skills')
@@ -87,4 +94,30 @@ def edit_shift():
 
         db.session.commit()
 
+    return redirect(url_for('shifts.shifts'))
+
+#new route for activating shift
+@shifts_bp.route('/activate_shift/<int:shift_id>', methods=['POST'], endpoint='activate_shift')
+def activate_shift(shift_id):
+    shift = Shift.query.get(shift_id)
+    if shift:
+        shift.activated = True
+        db.session.commit()
+    return redirect(url_for('shifts.shifts'))
+
+#new route for deactivating shift
+@shifts_bp.route('/deactivate_shift/<int:shift_id>', methods=['POST'], endpoint='deactivate_shift')
+def deactivate_shift(shift_id):
+    shift = Shift.query.get(shift_id)
+    if shift:
+        shift.activated = False
+        db.session.commit()
+    return redirect(url_for('shifts.shifts'))
+
+@shifts_bp.route('/delete_shift/<int:shift_id>', methods=['POST'], endpoint='delete_shift')
+def delete_shift(shift_id):
+    shift = Shift.query.get(shift_id)
+    if shift:
+        db.session.delete(shift)
+        db.session.commit()
     return redirect(url_for('shifts.shifts'))

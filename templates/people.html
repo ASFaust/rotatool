@@ -1,6 +1,5 @@
 <!-- templates/people.html -->
 {% extends 'base.html' %}
-
 {% block content %}
 <h1>People</h1>
 <p>Manage people here.</p>
@@ -21,7 +20,6 @@
         </tr>
     </thead>
     <tbody>
-        <!-- templates/people.html -->
         {% for item in people %}
         <tr>
             <td>{{ item.person.name }}</td>
@@ -38,6 +36,9 @@
                 <form action="/people/delete_person/{{ item.person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
                     <button type="submit" class="delete-button">Delete</button>
                 </form>
+                <button type="button" class="deactivate-button" onclick="toggleActive('{{ item.person.id }}')">
+                    {{ 'Deactivate' if not item.person.active else 'Activate' }}
+                </button>
             </td>
         </tr>
         {% endfor %}

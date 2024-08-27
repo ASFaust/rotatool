@@ -114,6 +114,7 @@ button:hover {
 
 /* Specific Button Styling for Edit and Delete */
 button.edit-button,
+button.deactivate-button,
 button.delete-button {
     margin-left: 10px;
     padding: 5px 10px;
@@ -128,6 +129,7 @@ button.delete-button {
 }
 
 button.edit-button:hover,
+button.deactivate-button:hover,
 button.delete-button:hover {
     background-color: #0056b3;
 }
