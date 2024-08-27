@@ -21,7 +21,7 @@
     </thead>
     <tbody>
         {% for item in people %}
-        <tr>
+        <tr class="{{ 'deactivated' if not item.person.activated else '' }}">
             <td>{{ item.person.name }}</td>
             <td>{{ item.person.start_date }}</td>
             <td>{{ item.person.leaving_date }}</td>
@@ -36,8 +36,8 @@
                 <form action="/people/delete_person/{{ item.person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
                     <button type="submit" class="delete-button">Delete</button>
                 </form>
-                <button type="button" class="deactivate-button" onclick="toggleActive('{{ item.person.id }}')">
-                    {{ 'Deactivate' if not item.person.active else 'Activate' }}
+                <button type="button" class="deactivate-button" onclick="toggleActive('{{ item.person.id }}', {{ 'true' if item.person.activated else 'false' }})">
+                    {{ 'Deactivate' if item.person.activated else 'Activate' }}
                 </button>
             </td>
         </tr>
@@ -166,6 +166,20 @@
 </form>
 
 <script>
+
+function toggleActive(personId, isActive) {
+    var action = isActive ? 'deactivate' : 'activate';
+    fetch(`/people/${action}_person/${personId}`, {
+        method: 'POST'
+    }).then(response => {
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to update person status.');
+        }
+    });
+}
+
 function addSkill() {
     var select = document.getElementById('newSkillSelect');
     var selectedSkillId = select.value;

@@ -171,3 +171,9 @@ table.shifts-table tbody tr td:last-child {
     display: flex;
     justify-content: flex-start;
 }
+
+/* static/styles.css */
+.deactivated {
+    background-color: #d3d3d3 !important; /* Override alternating row colors */
+    color: #a0a0a0;
+}

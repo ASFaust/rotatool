@@ -20,7 +20,7 @@
     </thead>
     <tbody>
         {% for item in shifts %}
-        <tr>
+        <tr class="{{ 'activated' if item.shift.activated else 'deactivated' }}">
             <td>{{ item.shift.name }}</td>
             <td>{{ item.shift.day_of_the_week }}</td>
             <td>{{ item.shift.start_time }}</td>
@@ -34,6 +34,9 @@
                 <form action="/shifts/delete_shift/{{ item.shift.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
                     <button type="submit" class="delete-button">Delete</button>
                 </form>
+                <button type="button" class="deactivate-button" onclick="toggleActive('{{ item.shift.id }}', {{ 'true' if item.shift.activated else 'false' }})">
+                    {{ 'Deactivate' if item.shift.activated else 'Activate' }}
+                </button>
             </td>
         </tr>
         {% endfor %}
@@ -189,8 +192,35 @@
         </tr>
     </table>
 </form>
+<!--
+function toggleActive(personId, isActive) {
+    var action = isActive ? 'deactivate' : 'activate';
+    fetch(`/people/${action}_person/${personId}`, {
+        method: 'POST'
+    }).then(response => {
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to update person status.');
+        }
+    });
+}
 
+-->
 <script>
+function toggleActive(shiftId, isActive) {
+    var action = isActive ? 'deactivate' : 'activate';
+    fetch(`/shifts/${action}_shift/${shiftId}`, {
+        method: 'POST'
+    }).then(response => {
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to update shift status.');
+        }
+    });
+}
+
 function addSkill() {
     var select = document.getElementById('newSkillSelect');
     var selectedSkillId = select.value;
