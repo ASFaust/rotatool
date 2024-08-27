@@ -1,4 +1,3 @@
-<!-- templates/people.html -->
 {% extends 'base.html' %}
 {% block content %}
 <h1>People</h1>
@@ -45,128 +44,70 @@
     </tbody>
 </table>
 
-<div id="editForm" style="display: none;">
-    <h3>Editing <span id="editPersonName"></span></h3>
-    <form id="editPersonForm" action="/people/edit_person" method="POST">
-        <input type="hidden" id="editPersonId" name="id">
+<div id="personFormContainer">
+    <h3 id="formTitle">Add Person</h3> <!-- Title changes dynamically -->
+    <form id="personForm" action="{{ url_for('people.add_person') }}" method="POST"> <!-- Action will be changed dynamically -->
+        <input type="hidden" id="personId" name="id"> <!-- Hidden input for person ID (for editing) -->
         <table>
             <tr>
-                <td><label for="editName">Name:</label></td>
-                <td><input type="text" id="editName" name="name" required></td>
+                <td><label for="name">Name:</label></td>
+                <td><input type="text" id="name" name="name" required></td>
             </tr>
             <tr>
-                <td><label for="editStartDate">Start Date:</label></td>
-                <td><input type="date" id="editStartDate" name="start_date" required></td>
+                <td><label for="start_date">Start Date:</label></td>
+                <td><input type="date" id="start_date" name="start_date" required></td>
             </tr>
             <tr>
-                <td><label for="editLeavingDate">Leaving Date:</label></td>
-                <td><input type="date" id="editLeavingDate" name="leaving_date" required></td>
+                <td><label for="leaving_date">Leaving Date:</label></td>
+                <td><input type="date" id="leaving_date" name="leaving_date" required></td>
             </tr>
             <tr>
-                <td><label for="editLeader">Leader:</label></td>
-                <td><input type="checkbox" id="editLeader" name="leader"></td>
+                <td><label for="leader">Leader:</label></td>
+                <td><input type="checkbox" id="leader" name="leader"></td>
             </tr>
             <tr>
-                <td><label for="editPartTime">Part Time:</label></td>
-                <td><input type="checkbox" id="editPartTime" name="part_time"></td>
+                <td><label for="part_time">Part Time:</label></td>
+                <td><input type="checkbox" id="part_time" name="part_time"></td>
             </tr>
             <tr>
-                <td><label for="editDaysOffPast">Days Off Past:</label></td>
-                <td><input type="number" id="editDaysOffPast" name="days_off_past"></td>
+                <td><label for="days_off_past">Days Off Past:</label></td>
+                <td><input type="number" id="days_off_past" name="days_off_past"></td>
             </tr>
             <tr>
-                <td><label for="editDaysOffTotal">Days Off Total:</label></td>
-                <td><input type="number" id="editDaysOffTotal" name="days_off_total"></td>
+                <td><label for="days_off_total">Days Off Total:</label></td>
+                <td><input type="number" id="days_off_total" name="days_off_total"></td>
             </tr>
             <tr>
-                <td><label for="editDayOffEvery">Day Off Every:</label></td>
-                <td><input type="number" id="editDayOffEvery" name="day_off_every" required></td>
+                <td><label for="day_off_every">Day Off Every:</label></td>
+                <td><input type="number" id="day_off_every" name="day_off_every" required></td>
             </tr>
             <tr>
-                <td style="vertical-align: top;"><label for="editSkills">Skills:</label></td>
+                <td style="vertical-align: top;"><label for="skills">Skills:</label></td>
                 <td>
-                    <div id="editSkillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
+                    <div id="skillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
                         <!-- Existing skills will be displayed here -->
                     </div>
-                    <div id="editNewSkillContainer" style="display: flex; align-items: center;">
-                        <select id="editNewSkillSelect">
+                    <div id="newSkillContainer" style="display: flex; align-items: center;">
+                        <select id="newSkillSelect">
                             {% for skill in skills %}
                             <option value="{{ skill.id }}">{{ skill.name }}</option>
                             {% endfor %}
                         </select>
-                        <button type="button" onclick="addEditSkill()" style="margin-left: 10px;">Add Skill</button>
+                        <button type="button" onclick="addSkill()" style="margin-left: 10px;">Add Skill</button>
                     </div>
                 </td>
             </tr>
             <tr>
                 <td colspan="2">
-                    <button type="submit">Save</button>
-                    <button type="button" onclick="cancelEdit()">Cancel</button>
+                    <button type="submit" id="formSubmitButton">Add Person</button>
+                    <button type="button" id="cancelEditButton" onclick="switchToAddMode()" style="display: none;">Cancel</button>
                 </td>
             </tr>
         </table>
     </form>
 </div>
 
-<form id="addPersonForm" action="/people/add_person" method="POST">
-    <h3>Add Person</h3>
-    <table>
-        <tr>
-            <td><label for="name">Name:</label></td>
-            <td><input type="text" name="name" required></td>
-        </tr>
-        <tr>
-            <td><label for="start_date">Start Date:</label></td>
-            <td><input type="date" name="start_date" required></td>
-        </tr>
-        <tr>
-            <td><label for="leaving_date">Leaving Date:</label></td>
-            <td><input type="date" name="leaving_date" required></td>
-        </tr>
-        <tr>
-            <td><label for="leader">Leader:</label></td>
-            <td><input type="checkbox" name="leader"></td>
-        </tr>
-        <tr>
-            <td><label for="part_time">Part Time:</label></td>
-            <td><input type="checkbox" name="part_time"></td>
-        </tr>
-        <tr>
-            <td><label for="days_off_past">Days Off Past:</label></td>
-            <td><input type="number" name="days_off_past"></td>
-        </tr>
-        <tr>
-            <td><label for="days_off_total">Days Off Total:</label></td>
-            <td><input type="number" name="days_off_total"></td>
-        </tr>
-        <tr>
-            <td><label for="day_off_every">Day Off Every:</label></td>
-            <td><input type="number" name="day_off_every" required></td>
-        </tr>
-        <tr>
-            <td style="vertical-align: top;"><label for="skills">Skills:</label></td>
-            <td>
-                <div id="skillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
-                    <!-- Existing skills will be displayed here -->
-                </div>
-                <div id="newSkillContainer" style="display: flex; align-items: center;">
-                    <select id="newSkillSelect">
-                        {% for skill in skills %}
-                        <option value="{{ skill.id }}">{{ skill.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="button" onclick="addSkill()" style="margin-left: 10px;">Add Skill</button>
-                </div>
-            </td>
-        </tr>
-        <tr>
-            <td colspan="2"><button type="submit">Add Person</button></td>
-        </tr>
-    </table>
-</form>
-
 <script>
-
 function toggleActive(personId, isActive) {
     var action = isActive ? 'deactivate' : 'activate';
     fetch(`/people/${action}_person/${personId}`, {
@@ -213,91 +154,86 @@ function addSkill() {
     container.appendChild(skillDiv);
 }
 
-function addEditSkill() {
-    var select = document.getElementById('editNewSkillSelect');
-    var selectedSkillId = select.value;
-    var selectedSkillName = select.options[select.selectedIndex].text;
+function switchToEditMode(personData) {
+    // Set form title, action URL, and button text for editing
+    document.getElementById('formTitle').textContent = 'Edit Person: ' + personData.name;
+    document.getElementById('personForm').action = "{{ url_for('people.edit_person') }}";
+    document.getElementById('formSubmitButton').textContent = 'Save Changes';
+    document.getElementById('cancelEditButton').style.display = 'inline'; // Show "Cancel Edit" button
 
-    var container = document.getElementById('editSkillsContainer');
-    var skillDiv = document.createElement('div');
-    skillDiv.className = 'skill-item';
-    skillDiv.dataset.skillId = selectedSkillId;
+    // Populate form fields with the person data
+    document.getElementById('personId').value = personData.id;
+    document.getElementById('name').value = personData.name;
+    document.getElementById('start_date').value = personData.start_date;
+    document.getElementById('leaving_date').value = personData.leaving_date;
+    document.getElementById('leader').checked = personData.leader;
+    document.getElementById('part_time').checked = personData.part_time;
+    document.getElementById('days_off_past').value = personData.days_off_past;
+    document.getElementById('days_off_total').value = personData.days_off_total;
+    document.getElementById('day_off_every').value = personData.day_off_every;
 
-    var skillNameSpan = document.createElement('span');
-    skillNameSpan.textContent = selectedSkillName;
-    skillDiv.appendChild(skillNameSpan);
+    // Populate the skills container
+    var container = document.getElementById('skillsContainer');
+    container.innerHTML = ''; // Clear existing skills
+    personData.skills.forEach(function(skill) {
+        var skillDiv = document.createElement('div');
+        skillDiv.className = 'skill-item';
+        skillDiv.dataset.skillId = skill.id;
 
-    var removeButton = document.createElement('span');
-    removeButton.textContent = ' x';
-    removeButton.style.cursor = 'pointer';
-    removeButton.style.color = 'red';
-    removeButton.style.marginLeft = '5px';
-    removeButton.onclick = function() {
-        container.removeChild(skillDiv);
-    };
-    skillDiv.appendChild(removeButton);
+        var skillNameSpan = document.createElement('span');
+        skillNameSpan.textContent = skill.name;
+        skillDiv.appendChild(skillNameSpan);
 
-    var hiddenInput = document.createElement('input');
-    hiddenInput.type = 'hidden';
-    hiddenInput.name = 'skills';
-    hiddenInput.value = selectedSkillId;
-    skillDiv.appendChild(hiddenInput);
+        var removeButton = document.createElement('span');
+        removeButton.textContent = ' x';
+        removeButton.style.cursor = 'pointer';
+        removeButton.style.color = 'red';
+        removeButton.style.marginLeft = '5px';
+        removeButton.onclick = function() {
+            container.removeChild(skillDiv);
+        };
+        skillDiv.appendChild(removeButton);
 
-    container.appendChild(skillDiv);
+        var hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'skills';
+        hiddenInput.value = skill.id;
+        skillDiv.appendChild(hiddenInput);
+
+        container.appendChild(skillDiv);
+    });
+    document.getElementById('personFormContainer').scrollIntoView({ behavior: 'smooth' });
+
 }
+
+function switchToAddMode() {
+    // Set form title, action URL, and button text for adding
+    document.getElementById('formTitle').textContent = 'Add Person';
+    document.getElementById('personForm').action = "{{ url_for('people.add_person') }}";
+    document.getElementById('formSubmitButton').textContent = 'Add Person';
+    document.getElementById('cancelEditButton').style.display = 'none'; // Hide "Cancel Edit" button
+
+    // Clear form fields
+    document.getElementById('personId').value = '';
+    document.getElementById('name').value = '';
+    document.getElementById('start_date').value = '';
+    document.getElementById('leaving_date').value = '';
+    document.getElementById('leader').checked = false;
+    document.getElementById('part_time').checked = false;
+    document.getElementById('days_off_past').value = '';
+    document.getElementById('days_off_total').value = '';
+    document.getElementById('day_off_every').value = '';
+
+    // Clear skills container
+    document.getElementById('skillsContainer').innerHTML = '';
+}
+
 function editPerson(id) {
     fetch(`/people/get_person/${id}`)
         .then(response => response.json())
         .then(data => {
-            document.getElementById('editForm').style.display = 'block';
-            document.getElementById('addPersonForm').style.display = 'none';
-            document.getElementById('editPersonName').textContent = data.name;
-            document.getElementById('editPersonId').value = data.id;
-            document.getElementById('editName').value = data.name;
-            document.getElementById('editStartDate').value = data.start_date;
-            document.getElementById('editLeavingDate').value = data.leaving_date;
-            document.getElementById('editLeader').checked = data.leader;
-            document.getElementById('editPartTime').checked = data.part_time;
-            document.getElementById('editDaysOffPast').value = data.days_off_past;
-            document.getElementById('editDaysOffTotal').value = data.days_off_total;
-            document.getElementById('editDayOffEvery').value = data.day_off_every;
-
-            var container = document.getElementById('editSkillsContainer');
-            container.innerHTML = '';
-            data.skills.forEach(function(skill) {
-                var skillDiv = document.createElement('div');
-                skillDiv.className = 'skill-item';
-                skillDiv.dataset.skillId = skill.id;
-
-                var skillNameSpan = document.createElement('span');
-                skillNameSpan.textContent = skill.name;
-                skillDiv.appendChild(skillNameSpan);
-
-                var removeButton = document.createElement('span');
-                removeButton.textContent = ' x';
-                removeButton.style.cursor = 'pointer';
-                removeButton.style.color = 'red';
-                removeButton.style.marginLeft = '5px';
-                removeButton.onclick = function() {
-                    container.removeChild(skillDiv);
-                };
-                skillDiv.appendChild(removeButton);
-
-                var hiddenInput = document.createElement('input');
-                hiddenInput.type = 'hidden';
-                hiddenInput.name = 'skills';
-                hiddenInput.value = skill.id;
-                skillDiv.appendChild(hiddenInput);
-
-                container.appendChild(skillDiv);
-            });
+            switchToEditMode(data);
         });
-}
-
-function cancelEdit() {
-    document.getElementById('editForm').style.display = 'none';
-    document.getElementById('addPersonForm').style.display = 'block';
-    document.getElementById('editPersonForm').reset();
 }
 
 function confirmDelete(event) {

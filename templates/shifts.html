@@ -13,7 +13,7 @@
             <th>End Time</th>
             <th>Type</th>
             <th>Number of People</th>
-            <th>Optional</th> <!-- New column for Optional -->
+            <th>Optional</th>
             <th>Skills Required</th>
             <th>Actions</th>
         </tr>
@@ -27,7 +27,7 @@
             <td>{{ item.shift.end_time }}</td>
             <td>{{ item.shift.type }}</td>
             <td>{{ item.shift.number_of_people }}</td>
-            <td>{{ 'Yes' if item.shift.optional else 'No' }}</td> <!-- Display Optional value -->
+            <td>{{ 'Yes' if item.shift.optional else 'No' }}</td>
             <td>{{ item.skills | join(', ') }}</td>
             <td>
                 <button type="button" class="edit-button" onclick="editShift('{{ item.shift.id }}')">Edit</button>
@@ -42,21 +42,22 @@
         {% endfor %}
     </tbody>
 </table>
-
-<div id="editForm" style="display: none;">
-    <h3>Editing <span id="editShiftName"></span></h3>
-    <form id="editShiftForm" action="{{ url_for('shifts.edit_shift') }}" method="POST">
-        <input type="hidden" id="editShiftId" name="id">
+<!-- Add "Cancel Edit" button and update title in the shift form -->
+<div id="shiftFormContainer">
+    <h3 id="formTitle">Add Shift</h3> <!-- Title changes dynamically -->
+    <form id="shiftForm" action="{{ url_for('shifts.add_shift') }}" method="POST"> <!-- Action will be changed dynamically -->
+        <input type="hidden" id="shiftId" name="id"> <!-- Hidden input for shift ID (for editing) -->
         <table>
             <tr>
-                <td><label for="editName">Name:</label></td>
-                <td><input type="text" id="editName" name="name" required></td>
+                <td><label for="name">Name:</label></td>
+                <td><input type="text" id="name" name="name" required></td>
             </tr>
             <tr>
-                <td><label for="editDayOfTheWeek">Day:</label></td>
+                <td><label for="day_of_the_week">Day:</label></td>
                 <td>
-                    <select id="editDayOfTheWeek" name="day_of_the_week">
+                    <select id="day_of_the_week" name="day_of_the_week">
                         <option value="Every Day">Every Day</option>
+                        <option value="Any Day">Any Day</option>
                         <option value="Monday">Monday</option>
                         <option value="Tuesday">Tuesday</option>
                         <option value="Wednesday">Wednesday</option>
@@ -68,17 +69,17 @@
                 </td>
             </tr>
             <tr>
-                <td><label for="editStartTime">Start Time:</label></td>
-                <td><input type="time" id="editStartTime" name="start_time" required></td>
+                <td><label for="start_time">Start Time:</label></td>
+                <td><input type="time" id="start_time" name="start_time" required></td>
             </tr>
             <tr>
-                <td><label for="editEndTime">End Time:</label></td>
-                <td><input type="time" id="editEndTime" name="end_time" required></td>
+                <td><label for="end_time">End Time:</label></td>
+                <td><input type="time" id="end_time" name="end_time" required></td>
             </tr>
             <tr>
-                <td><label for="editType">Type:</label></td>
+                <td><label for="type">Type:</label></td>
                 <td>
-                    <select id="editType" name="type" required>
+                    <select id="type" name="type" required>
                         <option value="Morning Survey">Morning Survey</option>
                         <option value="Night Survey">Night Survey</option>
                         <option value="Slideshow">Slideshow</option>
@@ -87,126 +88,39 @@
                 </td>
             </tr>
             <tr>
-                <td><label for="editNumberOfPeople">Number of People:</label></td>
-                <td><input type="number" id="editNumberOfPeople" name="number_of_people" required min="1" value="1"></td>
+                <td><label for="number_of_people">Number of People:</label></td>
+                <td><input type="number" id="number_of_people" name="number_of_people" required min="1" value="1"></td>
             </tr>
             <tr>
-                <td><label for="editOptional">Optional:</label></td>
-                <td><input type="checkbox" id="editOptional" name="optional"></td>
+                <td><label for="optional">Optional:</label></td>
+                <td><input type="checkbox" id="optional" name="optional"></td>
             </tr>
             <tr>
-                <td style="vertical-align: top;"><label for="editSkills">Required Skills:</label></td>
+                <td style="vertical-align: top;"><label for="skills">Required Skills:</label></td>
                 <td>
-                    <div id="editSkillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
-                        <!-- Existing skills will be displayed here -->
+                    <div id="skillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
+                        <!-- Skills will be dynamically populated -->
                     </div>
-                    <div id="editNewSkillContainer" style="display: flex; align-items: center;">
-                        <select id="editNewSkillSelect">
+                    <div id="newSkillContainer" style="display: flex; align-items: center;">
+                        <select id="newSkillSelect">
                             {% for skill in skills %}
                             <option value="{{ skill.id }}">{{ skill.name }}</option>
                             {% endfor %}
                         </select>
-                        <button type="button" onclick="addEditSkill()" style="margin-left: 10px;">Add Skill</button>
+                        <button type="button" onclick="addSkill()" style="margin-left: 10px;">Add Skill</button>
                     </div>
                 </td>
             </tr>
             <tr>
                 <td colspan="2">
-                    <button type="submit">Save</button>
-                    <button type="button" onclick="cancelEdit()">Cancel</button>
+                    <button type="submit" id="formSubmitButton">Add Shift</button> <!-- Button label changes dynamically -->
+                    <button type="button" id="cancelEditButton" onclick="switchToAddMode()" style="display: none;">Cancel Edit</button>
                 </td>
             </tr>
         </table>
     </form>
 </div>
 
-<form id="addShiftForm" action="{{ url_for('shifts.add_shift') }}" method="POST">
-    <h3>Add Shift</h3>
-    <table>
-        <tr>
-            <td><label for="name">Name:</label></td>
-            <td><input type="text" name="name" required></td>
-        </tr>
-        <tr>
-            <td><label for="day_of_the_week">Day:</label></td>
-            <td>
-                <select name="day_of_the_week">
-                    <option value="Every Day">Every Day</option>
-                    <option value="Monday">Monday</option>
-                    <option value="Tuesday">Tuesday</option>
-                    <option value="Wednesday">Wednesday</option>
-                    <option value="Thursday">Thursday</option>
-                    <option value="Friday">Friday</option>
-                    <option value="Saturday">Saturday</option>
-                    <option value="Sunday">Sunday</option>
-                </select>
-            </td>
-        </tr>
-        <tr>
-            <td><label for="start_time">Start Time:</label></td>
-            <td><input type="time" name="start_time" required></td>
-        </tr>
-        <tr>
-            <td><label for="end_time">End Time:</label></td>
-            <td><input type="time" name="end_time" required></td>
-        </tr>
-        <tr>
-            <td><label for="type">Type:</label></td>
-            <td>
-                <select name="type" required>
-                    <option value="Morning Survey">Morning Survey</option>
-                    <option value="Night Survey">Night Survey</option>
-                    <option value="Slideshow">Slideshow</option>
-                    <option value="Other">Other</option>
-                </select>
-            </td>
-        </tr>
-        <tr>
-            <td><label for="number_of_people">Number of People:</label></td>
-            <td><input type="number" name="number_of_people" id="number_of_people" required min="1" value="1"></td>
-        </tr>
-        <tr>
-            <td><label for="optional">Optional:</label></td>
-            <td><input type="checkbox" name="optional"></td>
-        </tr>
-        <tr>
-            <td style="vertical-align: top;"><label for="skills">Required Skills:</label></td>
-            <td>
-                <div id="skillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
-                    <!-- Existing skills will be displayed here -->
-                </div>
-                <div id="newSkillContainer" style="display: flex; align-items: center;">
-                    <select id="newSkillSelect">
-                        {% for skill in skills %}
-                        <option value="{{ skill.id }}">{{ skill.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="button" onclick="addSkill()" style="margin-left: 10px;">Add Skill</button>
-                </div>
-            </td>
-
-        </tr>
-
-        <tr>
-            <td colspan="2"><button type="seditubmit">Add Shift</button></td>
-        </tr>
-    </table>
-</form>
-<!--
-function toggleActive(personId, isActive) {
-    var action = isActive ? 'deactivate' : 'activate';
-    fetch(`/people/${action}_person/${personId}`, {
-        method: 'POST'
-    }).then(response => {
-        if (response.ok) {
-            location.reload();
-        } else {
-            alert('Failed to update person status.');
-        }
-    });
-}
-
--->
 <script>
 function toggleActive(shiftId, isActive) {
     var action = isActive ? 'deactivate' : 'activate';
@@ -254,91 +168,85 @@ function addSkill() {
     container.appendChild(skillDiv);
 }
 
-function addEditSkill() {
-    var select = document.getElementById('editNewSkillSelect');
-    var selectedSkillId = select.value;
-    var selectedSkillName = select.options[select.selectedIndex].text;
+function switchToEditMode(shiftData) {
+    // Set form title, action URL, and button text for editing
+    document.getElementById('formTitle').textContent = 'Edit Shift: ' + shiftData.name;
+    document.getElementById('shiftForm').action = "{{ url_for('shifts.edit_shift') }}";
+    document.getElementById('formSubmitButton').textContent = 'Save Changes';
+    document.getElementById('cancelEditButton').style.display = 'inline'; // Show "Cancel Edit" button
 
-    var container = document.getElementById('editSkillsContainer');
-    var skillDiv = document.createElement('div');
-    skillDiv.className = 'skill-item';
-    skillDiv.dataset.skillId = selectedSkillId;
+    // Populate form fields with the shift data
+    document.getElementById('shiftId').value = shiftData.id;
+    document.getElementById('name').value = shiftData.name;
+    document.getElementById('day_of_the_week').value = shiftData.day_of_the_week;
+    document.getElementById('start_time').value = shiftData.start_time;
+    document.getElementById('end_time').value = shiftData.end_time;
+    document.getElementById('type').value = shiftData.type;
+    document.getElementById('number_of_people').value = shiftData.number_of_people;
+    document.getElementById('optional').checked = shiftData.optional;
 
-    var skillNameSpan = document.createElement('span');
-    skillNameSpan.textContent = selectedSkillName;
-    skillDiv.appendChild(skillNameSpan);
+    // Populate the skills container
+    var container = document.getElementById('skillsContainer');
+    container.innerHTML = ''; // Clear existing skills
+    shiftData.skills.forEach(function(skill) {
+        var skillDiv = document.createElement('div');
+        skillDiv.className = 'skill-item';
+        skillDiv.dataset.skillId = skill.id;
 
-    var removeButton = document.createElement('span');
-    removeButton.textContent = ' x';
-    removeButton.style.cursor = 'pointer';
-    removeButton.style.color = 'red';
-    removeButton.style.marginLeft = '5px';
-    removeButton.onclick = function() {
-        container.removeChild(skillDiv);
-    };
-    skillDiv.appendChild(removeButton);
+        var skillNameSpan = document.createElement('span');
+        skillNameSpan.textContent = skill.name;
+        skillDiv.appendChild(skillNameSpan);
 
-    var hiddenInput = document.createElement('input');
-    hiddenInput.type = 'hidden';
-    hiddenInput.name = 'skills';
-    hiddenInput.value = selectedSkillId;
-    skillDiv.appendChild(hiddenInput);
+        var removeButton = document.createElement('span');
+        removeButton.textContent = ' x';
+        removeButton.style.cursor = 'pointer';
+        removeButton.style.color = 'red';
+        removeButton.style.marginLeft = '5px';
+        removeButton.onclick = function() {
+            container.removeChild(skillDiv);
+        };
+        skillDiv.appendChild(removeButton);
 
-    container.appendChild(skillDiv);
+        var hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'skills';
+        hiddenInput.value = skill.id;
+        skillDiv.appendChild(hiddenInput);
+
+        container.appendChild(skillDiv);
+    });
+
+    document.getElementById('shiftFormContainer').scrollIntoView({ behavior: 'smooth' });
+
+}
+
+function switchToAddMode() {
+    // Set form title, action URL, and button text for adding
+    document.getElementById('formTitle').textContent = 'Add Shift';
+    document.getElementById('shiftForm').action = "{{ url_for('shifts.add_shift') }}";
+    document.getElementById('formSubmitButton').textContent = 'Add Shift';
+    document.getElementById('cancelEditButton').style.display = 'none'; // Hide "Cancel Edit" button
+
+    // Clear form fields
+    document.getElementById('shiftId').value = '';
+    document.getElementById('name').value = '';
+    document.getElementById('day_of_the_week').value = 'Monday';
+    document.getElementById('start_time').value = '';
+    document.getElementById('end_time').value = '';
+    document.getElementById('type').value = 'Morning Survey';
+    document.getElementById('number_of_people').value = '1';
+    document.getElementById('optional').checked = false;
+
+    // Clear skills container
+    document.getElementById('skillsContainer').innerHTML = '';
 }
 
 function editShift(id) {
     fetch(`/shifts/get_shift/${id}`)
         .then(response => response.json())
         .then(data => {
-            document.getElementById('editForm').style.display = 'block';
-            document.getElementById('addShiftForm').style.display = 'none';
-            document.getElementById('editShiftName').textContent = data.name;
-            document.getElementById('editShiftId').value = data.id;
-            document.getElementById('editName').value = data.name;
-            document.getElementById('editDayOfTheWeek').value = data.day_of_the_week;
-            document.getElementById('editStartTime').value = data.start_time;
-            document.getElementById('editEndTime').value = data.end_time;
-            document.getElementById('editType').value = data.type;
-            document.getElementById('editNumberOfPeople').value = data.number_of_people;
-            document.getElementById('editOptional').checked = data.optional;
-
-            var container = document.getElementById('editSkillsContainer');
-            container.innerHTML = '';
-            data.skills.forEach(function(skill) {
-                var skillDiv = document.createElement('div');
-                skillDiv.className = 'skill-item';
-                skillDiv.dataset.skillId = skill.id;
-
-                var skillNameSpan = document.createElement('span');
-                skillNameSpan.textContent = skill.name;
-                skillDiv.appendChild(skillNameSpan);
-
-                var removeButton = document.createElement('span');
-                removeButton.textContent = ' x';
-                removeButton.style.cursor = 'pointer';
-                removeButton.style.color = 'red';
-                removeButton.style.marginLeft = '5px';
-                removeButton.onclick = function() {
-                    container.removeChild(skillDiv);
-                };
-                skillDiv.appendChild(removeButton);
-
-                var hiddenInput = document.createElement('input');
-                hiddenInput.type = 'hidden';
-                hiddenInput.name = 'skills';
-                hiddenInput.value = skill.id;
-                skillDiv.appendChild(hiddenInput);
-
-                container.appendChild(skillDiv);
-            });
+            switchToEditMode(data);
         });
-}
-
-function cancelEdit() {
-    document.getElementById('editForm').style.display = 'none';
-    document.getElementById('addShiftForm').style.display = 'block';
-    document.getElementById('editShiftForm').reset();
 }
 
 function confirmDelete(event) {
