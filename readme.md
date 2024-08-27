@@ -9,7 +9,9 @@ This project is a web application for generating rotas for the field projects of
 - [ ] Solve the tuesday/Monday bug 
 - [x] Add activate/deactivate to shifts 
 - [x] Add activate/deactivate to people 
-- [ ] Add "Any Day" as an Option for shifts 
+- [x] Add "Any Day" as an Option for shifts 
+- [x] Simplify the shifts and people html to one form each
+- [x] Automatic scroll down to the form for editing the shifts and people
 - [ ] new database model for "real" shifts, expanded from daily shifts. 
   - they are always assigned a certain date. no "any date" or "every day" 
     - they're either the result of the optimization, or they're manually added 

@@ -1,16 +1,98 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h1>Rota Request (Fixed Shifts)</h1>
-<p>Enter fixed shifts here.</p>
+<!-- New table for manually assigned shifts -->
+<h2>Manually Assigned Shifts</h2>
+<table class="rota-table">
+    <thead>
+        <tr>
+            <th>Person</th>
+            <th>Monday</th>
+            <th>Tuesday</th>
+            <th>Wednesday</th>
+            <th>Thursday</th>
+            <th>Friday</th>
+            <th>Saturday</th>
+            <th>Sunday</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for person in active_people %}
+        <tr>
+            <td>{{ person.name }}</td>
+            {% for day in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] %}
+            <td class="rota-cell">
+                <div id="{{ day }}_shifts_{{ person.id }}" style="font-size: 0.9em; margin-bottom: 10px;">
+                    <!-- Existing shifts will be displayed here -->
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <select id="{{ day }}_shift_select_{{ person.id }}" class="shift-select" onchange="addShift('{{ day }}', '{{ person.id }}')">
+                        <option value=""></option>
+                        {% for shift in available_shifts %}
+                        <option value="{{ shift.id }}">{{ shift.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 
-<!-- Add your form to enter fixed shifts -->
-<form action="/add_fixed_shift" method="POST">
-    <label for="shift">Shift:</label>
-    <input type="text" name="shift" required>
-    <label for="date">Date:</label>
-    <input type="date" name="date" required>
-    <button type="submit">Add Fixed Shift</button>
-</form>
+<script>
+function addShift(day, personId) {
+    var select = document.getElementById(day + '_shift_select_' + personId);
+    var selectedShiftId = select.value;
+    var selectedShiftName = select.options[select.selectedIndex].text;
+
+    if (!selectedShiftId) return;
+
+    var container = document.getElementById(day + '_shifts_' + personId);
+    var shiftDiv = document.createElement('div');
+    shiftDiv.className = 'shift-item';
+    shiftDiv.dataset.shiftId = selectedShiftId;
+
+    var shiftNameSpan = document.createElement('span');
+    shiftNameSpan.textContent = selectedShiftName;
+    shiftDiv.appendChild(shiftNameSpan);
+
+    var removeButton = document.createElement('span');
+    removeButton.textContent = ' x';
+    removeButton.style.cursor = 'pointer';
+    removeButton.style.color = 'red';
+    removeButton.style.marginLeft = '5px';
+    removeButton.onclick = function() {
+        container.removeChild(shiftDiv);
+    };
+    shiftDiv.appendChild(removeButton);
+
+    var hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.name = day + '_shifts_' + personId;
+    hiddenInput.value = selectedShiftId;
+    shiftDiv.appendChild(hiddenInput);
+
+    container.appendChild(shiftDiv);
+
+    // Reset the dropdown to the default option
+    select.value = "";
+}
+</script>
+
+<style>
+.rota-table th, .rota-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+.rota-cell {
+    border: 1px solid #ddd;
+}
+
+.shift-select {
+    width: 100px;
+    height: 30px;
+}
+</style>
 {% endblock %}
-
