@@ -21,11 +21,11 @@
         <tr>
             <td>{{ person.name }}</td>
             {% for day in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] %}
-            <td class="rota-cell">
-                <div id="{{ day }}_shifts_{{ person.id }}" style="font-size: 0.9em; margin-bottom: 10px;">
+            <td class="rota-cell day-cell" id="{{ day }}_cell_{{ person.id }}" onclick="toggleDropdown(event, '{{ day }}', '{{ person.id }}')">
+                <div id="{{ day }}_shifts_{{ person.id }}" class="shift-container">
                     <!-- Existing shifts will be displayed here -->
                 </div>
-                <div style="display: flex; align-items: center;">
+                <div class="dropdown-container" id="{{ day }}_dropdown_{{ person.id }}">
                     <select id="{{ day }}_shift_select_{{ person.id }}" class="shift-select" onchange="addShift('{{ day }}', '{{ person.id }}')">
                         <option value=""></option>
                         {% for shift in available_shifts %}
@@ -40,7 +40,49 @@
     </tbody>
 </table>
 
+<!-- Buttons for Save, Reset, Clear -->
+<div class="button-container">
+    <button onclick="saveShifts()">Save</button>
+    <button onclick="resetShifts()">Reset</button>
+    <button onclick="clearShifts()">Clear</button>
+</div>
+
 <script>
+document.addEventListener('click', function(event) {
+    // Close all dropdowns if clicking outside a cell or dropdown
+    if (!event.target.closest('.rota-cell')) {
+        closeAllDropdowns();
+    }
+});
+
+function toggleDropdown(event, day, personId) {
+    event.stopPropagation();  // Prevent the event from closing the dropdown immediately
+
+    var dropdown = document.getElementById(day + '_dropdown_' + personId);
+    var cell = document.getElementById(day + '_cell_' + personId);
+
+    // Close other dropdowns before opening this one
+    closeAllDropdowns();
+
+    // Toggle the clicked cell's dropdown and highlight
+    dropdown.style.display = 'block';
+    cell.style.backgroundColor = '#e0f7fa';  // Highlight the cell
+}
+
+function closeAllDropdowns() {
+    var dropdowns = document.querySelectorAll('.dropdown-container');
+    var cells = document.querySelectorAll('.rota-cell');
+
+    // Hide all dropdowns and reset cell highlights
+    dropdowns.forEach(function(dropdown) {
+        dropdown.style.display = 'none';
+    });
+
+    cells.forEach(function(cell) {
+        cell.style.backgroundColor = '';  // Reset cell background color
+    });
+}
+
 function addShift(day, personId) {
     var select = document.getElementById(day + '_shift_select_' + personId);
     var selectedShiftId = select.value;
@@ -62,6 +104,7 @@ function addShift(day, personId) {
     removeButton.style.cursor = 'pointer';
     removeButton.style.color = 'red';
     removeButton.style.marginLeft = '5px';
+    removeButton.style.fontSize = '1.2em';
     removeButton.onclick = function() {
         container.removeChild(shiftDiv);
     };
@@ -75,24 +118,87 @@ function addShift(day, personId) {
 
     container.appendChild(shiftDiv);
 
-    // Reset the dropdown to the default option
+    // Reset the dropdown and close it
     select.value = "";
+    closeAllDropdowns();  // Close the dropdown and reset cell background
 }
+
+function saveShifts() {
+    // Implement save functionality
+    alert('Shifts saved!');
+}
+
+function resetShifts() {
+    // Implement reset functionality
+    location.reload();
+}
+
+function clearShifts() {
+    // Implement clear functionality
+    var containers = document.querySelectorAll('.shift-container');
+    containers.forEach(function(container) {
+        container.innerHTML = '';
+    });
+}
+</script>
 </script>
 
 <style>
+.rota-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
 .rota-table th, .rota-table td {
     border: 1px solid #ddd;
+    text-align: left;
     padding: 8px;
 }
 
+.rota-table th {
+    background-color: #f2f2f2;
+}
+
+.rota-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
 .rota-cell {
+    position: relative;
+    cursor: pointer;
+}
+
+.shift-container {
+    font-size: 0.9em;
+    margin-bottom: 10px;
+}
+
+.dropdown-container {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    z-index: 10;
+    background-color: white;
     border: 1px solid #ddd;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .shift-select {
-    width: 100px;
+    width: 100%;
     height: 30px;
+    border: none;
+    padding: 5px;
+    box-sizing: border-box;
+}
+
+/* Ensure equal width for all day columns */
+.rota-table th,
+.rota-table td.day-cell {
+    width: calc(100% / 8); /* Divide equally among the 8 columns */
+    text-align: center;
 }
 </style>
 {% endblock %}

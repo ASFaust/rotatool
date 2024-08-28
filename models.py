@@ -26,6 +26,20 @@ class Shift(db.Model):
     optional = db.Column(db.Boolean, default=False)
     activated = db.Column(db.Boolean, default=True)  # New field
 
+class ManualShift(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
+    day = db.Column(db.String(10), nullable=False)
+    shift_id = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=True)
+    non_shift_info = db.Column(db.String(50), nullable=True)  # Renamed field
+
+    person = db.relationship('Person', backref=db.backref('manual_shifts', cascade='all, delete-orphan'))
+    shift = db.relationship('Shift', backref=db.backref('manual_shifts', cascade='all, delete-orphan'))
+
+    @property
+    def is_valid(self):
+        return self.shift_id is not None or self.non_shift_info is not None
+
 class Skill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), nullable=False, unique=True)
