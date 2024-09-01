@@ -1,8 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<!-- New table for manually assigned shifts -->
-<h2>Manually Assigned Shifts</h2>
+<h2 id="rotaHeading">Manually Assigned Shifts</h2>
 <table class="rota-table">
     <thead>
         <tr>
@@ -19,14 +18,21 @@
     <tbody>
         {% for person in active_people %}
         <tr>
-            <td>{{ person.name }}</td>
+            <td data-person-id="{{ person.id }}">{{ person.name }}</td>
             {% for day in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] %}
-            <td class="rota-cell day-cell" id="{{ day }}_cell_{{ person.id }}" onclick="toggleDropdown(event, '{{ day }}', '{{ person.id }}')">
+            <td class="rota-cell day-cell" id="{{ day }}_cell_{{ person.id }}" data-day="{{ day }}" onclick="toggleDropdown(event, '{{ day }}', '{{ person.id }}')">
                 <div id="{{ day }}_shifts_{{ person.id }}" class="shift-container">
-                    <!-- Existing shifts will be displayed here -->
+                    {% for shift in manual_shifts %}
+                        {% if shift.person_id == person.id and shift.day == day %}
+                            <div class="shift-item" data-shift-id="{{ shift.shift_id }}" data-non-shift-info="{{ shift.non_shift_info }}">
+                                <span>{{ shift.shift.name if shift.shift_id else shift.non_shift_info }}</span>
+                                <span style="cursor: pointer; color: red; margin-left: 5px;" onclick="this.parentElement.remove(); markDirty()"> x</span>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
                 </div>
                 <div class="dropdown-container" id="{{ day }}_dropdown_{{ person.id }}">
-                    <select id="{{ day }}_shift_select_{{ person.id }}" class="shift-select" onchange="addShift('{{ day }}', '{{ person.id }}')">
+                    <select id="{{ day }}_shift_select_{{ person.id }}" class="shift-select" onchange="addShift('{{ day }}', '{{ person.id }}'); markDirty()">
                         <option value=""></option>
                         {% for shift in available_shifts %}
                         <option value="{{ shift.id }}">{{ shift.name }}</option>
@@ -40,46 +46,59 @@
     </tbody>
 </table>
 
-<!-- Buttons for Save, Reset, Clear -->
 <div class="button-container">
     <button onclick="saveShifts()">Save</button>
     <button onclick="resetShifts()">Reset</button>
-    <button onclick="clearShifts()">Clear</button>
+    <button onclick="clearShifts(); markDirty()">Clear</button>
 </div>
 
 <script>
+let isDirty = false;
+
+function markDirty() {
+    isDirty = true;
+    updateHeading();
+}
+
+function updateHeading() {
+    const heading = document.getElementById('rotaHeading');
+    if (isDirty) {
+        heading.textContent = 'Manually Assigned Shifts (unsaved changes)';
+    } else {
+        heading.textContent = 'Manually Assigned Shifts';
+    }
+}
+
+window.addEventListener('beforeunload', function (e) {
+    if (isDirty) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+    }
+});
+
 document.addEventListener('click', function(event) {
-    // Close all dropdowns if clicking outside a cell or dropdown
     if (!event.target.closest('.rota-cell')) {
         closeAllDropdowns();
     }
 });
 
 function toggleDropdown(event, day, personId) {
-    event.stopPropagation();  // Prevent the event from closing the dropdown immediately
-
+    event.stopPropagation();
     var dropdown = document.getElementById(day + '_dropdown_' + personId);
     var cell = document.getElementById(day + '_cell_' + personId);
-
-    // Close other dropdowns before opening this one
     closeAllDropdowns();
-
-    // Toggle the clicked cell's dropdown and highlight
     dropdown.style.display = 'block';
-    cell.style.backgroundColor = '#e0f7fa';  // Highlight the cell
+    cell.style.backgroundColor = '#e0f7fa';
 }
 
 function closeAllDropdowns() {
     var dropdowns = document.querySelectorAll('.dropdown-container');
     var cells = document.querySelectorAll('.rota-cell');
-
-    // Hide all dropdowns and reset cell highlights
     dropdowns.forEach(function(dropdown) {
         dropdown.style.display = 'none';
     });
-
     cells.forEach(function(cell) {
-        cell.style.backgroundColor = '';  // Reset cell background color
+        cell.style.backgroundColor = '';
     });
 }
 
@@ -87,60 +106,85 @@ function addShift(day, personId) {
     var select = document.getElementById(day + '_shift_select_' + personId);
     var selectedShiftId = select.value;
     var selectedShiftName = select.options[select.selectedIndex].text;
-
     if (!selectedShiftId) return;
-
     var container = document.getElementById(day + '_shifts_' + personId);
     var shiftDiv = document.createElement('div');
     shiftDiv.className = 'shift-item';
     shiftDiv.dataset.shiftId = selectedShiftId;
-
+    shiftDiv.dataset.day = day;
     var shiftNameSpan = document.createElement('span');
     shiftNameSpan.textContent = selectedShiftName;
     shiftDiv.appendChild(shiftNameSpan);
-
     var removeButton = document.createElement('span');
     removeButton.textContent = ' x';
     removeButton.style.cursor = 'pointer';
     removeButton.style.color = 'red';
     removeButton.style.marginLeft = '5px';
-    removeButton.style.fontSize = '1.2em';
     removeButton.onclick = function() {
         container.removeChild(shiftDiv);
+        markDirty();
     };
     shiftDiv.appendChild(removeButton);
-
     var hiddenInput = document.createElement('input');
     hiddenInput.type = 'hidden';
     hiddenInput.name = day + '_shifts_' + personId;
     hiddenInput.value = selectedShiftId;
     shiftDiv.appendChild(hiddenInput);
-
     container.appendChild(shiftDiv);
-
-    // Reset the dropdown and close it
     select.value = "";
-    closeAllDropdowns();  // Close the dropdown and reset cell background
+    closeAllDropdowns();
+    markDirty();
 }
 
 function saveShifts() {
-    // Implement save functionality
-    alert('Shifts saved!');
+    var shifts = [];
+    var rows = document.querySelectorAll('.rota-table tbody tr');
+    rows.forEach(function(row) {
+        var personId = row.querySelector('td').dataset.personId;
+        var cells = row.querySelectorAll('.day-cell');
+        cells.forEach(function(cell) {
+            var shiftItems = cell.querySelectorAll('.shift-item');
+            shiftItems.forEach(function(shiftItem) {
+                shifts.push({
+                    person_id: personId,
+                    day: cell.dataset.day,
+                    shift_id: shiftItem.dataset.shiftId
+                });
+            });
+        });
+    });
+    fetch('/rota/save_manual_shifts', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ shifts: shifts })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert(data.message);
+            isDirty = false;
+            updateHeading();
+        } else {
+            alert('Failed to save shifts.');
+        }
+    });
 }
 
 function resetShifts() {
-    // Implement reset functionality
     location.reload();
+    isDirty = false;
+    updateHeading();
 }
 
 function clearShifts() {
-    // Implement clear functionality
     var containers = document.querySelectorAll('.shift-container');
     containers.forEach(function(container) {
         container.innerHTML = '';
     });
+    markDirty();
 }
-</script>
 </script>
 
 <style>
@@ -194,10 +238,9 @@ function clearShifts() {
     box-sizing: border-box;
 }
 
-/* Ensure equal width for all day columns */
 .rota-table th,
 .rota-table td.day-cell {
-    width: calc(100% / 8); /* Divide equally among the 8 columns */
+    width: calc(100% / 8);
     text-align: center;
 }
 </style>

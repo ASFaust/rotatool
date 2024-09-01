@@ -1,4 +1,3 @@
-# models.py
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -10,9 +9,6 @@ class Person(db.Model):
     leaving_date = db.Column(db.Date, nullable=False)
     leader = db.Column(db.Boolean, default=False)
     part_time = db.Column(db.Boolean, default=False)
-    day_off_every = db.Column(db.Integer, default=10, nullable=False)
-    days_off_past = db.Column(db.Integer, default=0)
-    days_off_total = db.Column(db.Integer, default=0)
     activated = db.Column(db.Boolean, default=True)  # New field
 
 class Shift(db.Model):
@@ -26,25 +22,10 @@ class Shift(db.Model):
     optional = db.Column(db.Boolean, default=False)
     activated = db.Column(db.Boolean, default=True)  # New field
 
-class ManualShift(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
-    day = db.Column(db.String(10), nullable=False)
-    shift_id = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=True)
-    non_shift_info = db.Column(db.String(50), nullable=True)  # Renamed field
-
-    person = db.relationship('Person', backref=db.backref('manual_shifts', cascade='all, delete-orphan'))
-    shift = db.relationship('Shift', backref=db.backref('manual_shifts', cascade='all, delete-orphan'))
-
-    @property
-    def is_valid(self):
-        return self.shift_id is not None or self.non_shift_info is not None
-
 class Skill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), nullable=False, unique=True)
 
-# models.py
 class PersonSkill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
@@ -58,3 +39,17 @@ class ShiftSkill(db.Model):
     skill_id = db.Column(db.Integer, db.ForeignKey('skill.id'), nullable=False)
     shift = db.relationship('Shift', backref=db.backref('shift_skills', cascade='all, delete-orphan'))
     skill = db.relationship('Skill', backref=db.backref('shift_skills', cascade='all, delete-orphan'))
+
+class ManualShift(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
+    day = db.Column(db.String(10), nullable=False)
+    shift_id = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=True)
+    non_shift_info = db.Column(db.String(50), nullable=True)
+
+    person = db.relationship('Person', backref=db.backref('manual_shifts', cascade='all, delete-orphan'))
+    shift = db.relationship('Shift', backref=db.backref('manual_shifts', cascade='all, delete-orphan'))
+
+    @property
+    def is_valid(self):
+        return self.shift_id is not None or self.non_shift_info is not None

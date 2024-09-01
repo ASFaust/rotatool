@@ -11,9 +11,6 @@
             <th>Leaving Date</th>
             <th>Leader</th>
             <th>Part Time</th>
-            <th>Days Off Past</th>
-            <th>Days Off Total</th>
-            <th>Day Off Every</th>
             <th>Skills</th>
             <th>Actions</th>
         </tr>
@@ -26,9 +23,6 @@
             <td>{{ item.person.leaving_date }}</td>
             <td>{{ 'Yes' if item.person.leader else 'No' }}</td>
             <td>{{ 'Yes' if item.person.part_time else 'No' }}</td>
-            <td>{{ item.person.days_off_past }}</td>
-            <td>{{ item.person.days_off_total }}</td>
-            <td>{{ item.person.day_off_every }}</td>
             <td>{{ item.skills | join(', ') }}</td>
             <td>
                 <button type="button" class="edit-button" onclick="editPerson('{{ item.person.id }}')">Edit</button>
@@ -68,18 +62,6 @@
             <tr>
                 <td><label for="part_time">Part Time:</label></td>
                 <td><input type="checkbox" id="part_time" name="part_time"></td>
-            </tr>
-            <tr>
-                <td><label for="days_off_past">Days Off Past:</label></td>
-                <td><input type="number" id="days_off_past" name="days_off_past"></td>
-            </tr>
-            <tr>
-                <td><label for="days_off_total">Days Off Total:</label></td>
-                <td><input type="number" id="days_off_total" name="days_off_total"></td>
-            </tr>
-            <tr>
-                <td><label for="day_off_every">Day Off Every:</label></td>
-                <td><input type="number" id="day_off_every" name="day_off_every" required></td>
             </tr>
             <tr>
                 <td style="vertical-align: top;"><label for="skills">Skills:</label></td>
@@ -168,9 +150,6 @@ function switchToEditMode(personData) {
     document.getElementById('leaving_date').value = personData.leaving_date;
     document.getElementById('leader').checked = personData.leader;
     document.getElementById('part_time').checked = personData.part_time;
-    document.getElementById('days_off_past').value = personData.days_off_past;
-    document.getElementById('days_off_total').value = personData.days_off_total;
-    document.getElementById('day_off_every').value = personData.day_off_every;
 
     // Populate the skills container
     var container = document.getElementById('skillsContainer');
@@ -220,9 +199,6 @@ function switchToAddMode() {
     document.getElementById('leaving_date').value = '';
     document.getElementById('leader').checked = false;
     document.getElementById('part_time').checked = false;
-    document.getElementById('days_off_past').value = '';
-    document.getElementById('days_off_total').value = '';
-    document.getElementById('day_off_every').value = '';
 
     // Clear skills container
     document.getElementById('skillsContainer').innerHTML = '';
