@@ -17,15 +17,17 @@
     </thead>
     <tbody>
         {% for item in people %}
-        <tr class="{{ 'deactivated' if not item.person.activated else '' }}">
-            <td>{{ item.person.name }}</td>
-            <td>{{ item.person.start_date }}</td>
-            <td>{{ item.person.leaving_date }}</td>
-            <td>{{ 'Yes' if item.person.leader else 'No' }}</td>
-            <td>{{ 'Yes' if item.person.part_time else 'No' }}</td>
-            <td>{{ item.skills | join(', ') }}</td>
+        <tr class="{{ 'deactivated' if not item.person.activated else '' }}" data-person-id="{{ item.person.id }}">
+            <td class="name">{{ item.person.name }}</td>
+            <td class="start_date">{{ item.person.start_date }}</td>
+            <td class="leaving_date">{{ item.person.leaving_date }}</td>
+            <td class="leader">{{ 'Yes' if item.person.leader else 'No' }}</td>
+            <td class="part_time">{{ 'Yes' if item.person.part_time else 'No' }}</td>
+            <td class="skills">{{ item.skills | join(', ') }}</td>
             <td>
-                <button type="button" class="edit-button" onclick="editPerson('{{ item.person.id }}')">Edit</button>
+                <button type="button" class="edit-button" onclick="editRow(this)">Edit</button>
+                <button type="button" class="save-button" onclick="saveRow(this)" style="display:none;">Save</button>
+                <button type="button" class="cancel-button" onclick="cancelEdit(this)" style="display:none;">Cancel</button>
                 <form action="/people/delete_person/{{ item.person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
                     <button type="submit" class="delete-button">Delete</button>
                 </form>
@@ -35,59 +37,43 @@
             </td>
         </tr>
         {% endfor %}
+        <!-- Row for Adding New Person -->
+        <tr id="addNewRow">
+            <td>
+                <input type="text" id="new_name" name="name" placeholder="Name" required>
+            </td>
+            <td>
+                <input type="date" id="new_start_date" name="start_date" required>
+            </td>
+            <td>
+                <input type="date" id="new_leaving_date" name="leaving_date" required>
+            </td>
+            <td>
+                <input type="checkbox" id="new_leader" name="leader">
+            </td>
+            <td>
+                <input type="checkbox" id="new_part_time" name="part_time">
+            </td>
+            <td>
+                <div id="new_skills_container" style="font-size: 0.9em; margin-bottom: 10px;">
+                    <!-- Selected skills will appear here -->
+                </div>
+                <div id="new_skill_select_container" style="display: flex; align-items: center;">
+                    <select id="new_skill_select">
+                        <option value="">Select Skill</option>
+                        {% for skill in skills %}
+                        <option value="{{ skill.id }}">{{ skill.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" onclick="addNewSkill()" style="margin-left: 10px;">Add Skill</button>
+                </div>
+            </td>
+            <td>
+                <button type="button" onclick="addNewPerson()">Add Person</button>
+            </td>
+        </tr>
     </tbody>
 </table>
-
-<div id="personFormContainer">
-    <h3 id="formTitle">Add Person</h3> <!-- Title changes dynamically -->
-    <form id="personForm" action="{{ url_for('people.add_person') }}" method="POST"> <!-- Action will be changed dynamically -->
-        <input type="hidden" id="personId" name="id"> <!-- Hidden input for person ID (for editing) -->
-        <table>
-            <tr>
-                <td><label for="name">Name:</label></td>
-                <td><input type="text" id="name" name="name" required></td>
-            </tr>
-            <tr>
-                <td><label for="start_date">Start Date:</label></td>
-                <td><input type="date" id="start_date" name="start_date" required></td>
-            </tr>
-            <tr>
-                <td><label for="leaving_date">Leaving Date:</label></td>
-                <td><input type="date" id="leaving_date" name="leaving_date" required></td>
-            </tr>
-            <tr>
-                <td><label for="leader">Leader:</label></td>
-                <td><input type="checkbox" id="leader" name="leader"></td>
-            </tr>
-            <tr>
-                <td><label for="part_time">Part Time:</label></td>
-                <td><input type="checkbox" id="part_time" name="part_time"></td>
-            </tr>
-            <tr>
-                <td style="vertical-align: top;"><label for="skills">Skills:</label></td>
-                <td>
-                    <div id="skillsContainer" style="font-size: 0.9em; margin-bottom: 10px;">
-                        <!-- Existing skills will be displayed here -->
-                    </div>
-                    <div id="newSkillContainer" style="display: flex; align-items: center;">
-                        <select id="newSkillSelect">
-                            {% for skill in skills %}
-                            <option value="{{ skill.id }}">{{ skill.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <button type="button" onclick="addSkill()" style="margin-left: 10px;">Add Skill</button>
-                    </div>
-                </td>
-            </tr>
-            <tr>
-                <td colspan="2">
-                    <button type="submit" id="formSubmitButton">Add Person</button>
-                    <button type="button" id="cancelEditButton" onclick="switchToAddMode()" style="display: none;">Cancel</button>
-                </td>
-            </tr>
-        </table>
-    </form>
-</div>
 
 <script>
 function toggleActive(personId, isActive) {
@@ -103,12 +89,146 @@ function toggleActive(personId, isActive) {
     });
 }
 
-function addSkill() {
-    var select = document.getElementById('newSkillSelect');
+function confirmDelete(event) {
+    if (!confirm("Do you really want to delete?")) {
+        event.preventDefault();
+    }
+}
+
+function editRow(button) {
+    var row = button.closest('tr');
+    var personId = row.getAttribute('data-person-id');
+
+    // Hide Edit/Delete/Activate buttons
+    row.querySelector('.edit-button').style.display = 'none';
+    row.querySelector('.delete-button').style.display = 'none';
+    row.querySelector('.deactivate-button').style.display = 'none';
+
+    // Show Save/Cancel buttons
+    row.querySelector('.save-button').style.display = 'inline';
+    row.querySelector('.cancel-button').style.display = 'inline';
+
+    // Make cells editable
+    makeCellEditable(row, 'name');
+    makeCellEditable(row, 'start_date', 'date');
+    makeCellEditable(row, 'leaving_date', 'date');
+    makeCellCheckboxEditable(row, 'leader');
+    makeCellCheckboxEditable(row, 'part_time');
+    makeSkillsEditable(row);
+}
+
+function makeCellEditable(row, className, type='text') {
+    var cell = row.querySelector('.' + className);
+    var currentValue = cell.textContent.trim();
+    if (type === 'date') {
+        cell.innerHTML = `<input type="date" value="${currentValue}">`;
+    } else {
+        cell.innerHTML = `<input type="text" value="${currentValue}" required>`;
+    }
+}
+
+function makeCellCheckboxEditable(row, className) {
+    var cell = row.querySelector('.' + className);
+    var isChecked = cell.textContent.trim() === 'Yes';
+    cell.innerHTML = `<input type="checkbox" ${isChecked ? 'checked' : ''}>`;
+}
+
+function makeSkillsEditable(row) {
+    var cell = row.querySelector('.skills');
+    var skills = cell.textContent.trim().split(', ').filter(s => s);
+    cell.innerHTML = `
+        <div class="skills-container" style="font-size: 0.9em; margin-bottom: 10px;">
+            ${skills.map(skill => `
+                <div class="skill-item" data-skill-id="">
+                    <span>${skill}</span>
+                    <span style="cursor: pointer; color: red; margin-left: 5px;" onclick="removeSkill(this)">x</span>
+                </div>
+            `).join('')}
+        </div>
+        <div class="skill-select-container" style="display: flex; align-items: center;">
+            <select class="skill-select">
+                <option value="">Select Skill</option>
+                {% for skill in skills %}
+                <option value="{{ skill.id }}">{{ skill.name }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" onclick="addSkillToRow(this)" style="margin-left: 10px;">Add Skill</button>
+        </div>
+    `;
+}
+
+function removeSkill(element) {
+    var skillItem = element.parentElement;
+    skillItem.parentElement.removeChild(skillItem);
+}
+
+function addSkillToRow(button) {
+    var container = button.parentElement.parentElement.querySelector('.skills-container');
+    var select = button.parentElement.querySelector('.skill-select');
+    var selectedSkill = select.value;
+    var selectedSkillText = select.options[select.selectedIndex].text;
+
+    if (selectedSkill === "") {
+        alert('Please select a skill to add.');
+        return;
+    }
+
+    // Check if skill already added
+    var existingSkills = Array.from(container.querySelectorAll('.skill-item')).map(item => item.querySelector('span').textContent.trim());
+    if (existingSkills.includes(selectedSkillText)) {
+        alert('Skill already added.');
+        return;
+    }
+
+    var skillDiv = document.createElement('div');
+    skillDiv.className = 'skill-item';
+    skillDiv.dataset.skillId = selectedSkill;
+
+    var skillNameSpan = document.createElement('span');
+    skillNameSpan.textContent = selectedSkillText;
+    skillDiv.appendChild(skillNameSpan);
+
+    var removeButton = document.createElement('span');
+    removeButton.textContent = ' x';
+    removeButton.style.cursor = 'pointer';
+    removeButton.style.color = 'red';
+    removeButton.style.marginLeft = '5px';
+    removeButton.onclick = function() {
+        container.removeChild(skillDiv);
+    };
+    skillDiv.appendChild(removeButton);
+
+    // Hidden input to store skill ID
+    var hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.name = 'skills';
+    hiddenInput.value = selectedSkill;
+    skillDiv.appendChild(hiddenInput);
+
+    container.appendChild(skillDiv);
+
+    // Reset the select
+    select.value = "";
+}
+
+function addNewSkill() {
+    var select = document.getElementById('new_skill_select');
     var selectedSkillId = select.value;
     var selectedSkillName = select.options[select.selectedIndex].text;
 
-    var container = document.getElementById('skillsContainer');
+    if (selectedSkillId === "") {
+        alert('Please select a skill to add.');
+        return;
+    }
+
+    // Check if skill already added
+    var existingSkills = Array.from(document.querySelectorAll('#new_skills_container .skill-item')).map(item => item.querySelector('span').textContent.trim());
+    if (existingSkills.includes(selectedSkillName)) {
+        alert('Skill already added.');
+        return;
+    }
+
+    var container = document.getElementById('new_skills_container');
     var skillDiv = document.createElement('div');
     skillDiv.className = 'skill-item';
     skillDiv.dataset.skillId = selectedSkillId;
@@ -134,88 +254,177 @@ function addSkill() {
     skillDiv.appendChild(hiddenInput);
 
     container.appendChild(skillDiv);
+
+    // Reset the select
+    select.value = "";
 }
 
-function switchToEditMode(personData) {
-    // Set form title, action URL, and button text for editing
-    document.getElementById('formTitle').textContent = 'Edit Person: ' + personData.name;
-    document.getElementById('personForm').action = "{{ url_for('people.edit_person') }}";
-    document.getElementById('formSubmitButton').textContent = 'Save Changes';
-    document.getElementById('cancelEditButton').style.display = 'inline'; // Show "Cancel Edit" button
+// Example: saveRow function
+function saveRow(button) {
+    var row = button.closest('tr');
+    var personId = row.getAttribute('data-person-id');
 
-    // Populate form fields with the person data
-    document.getElementById('personId').value = personData.id;
-    document.getElementById('name').value = personData.name;
-    document.getElementById('start_date').value = personData.start_date;
-    document.getElementById('leaving_date').value = personData.leaving_date;
-    document.getElementById('leader').checked = personData.leader;
-    document.getElementById('part_time').checked = personData.part_time;
+    // Gather data from inputs
+    var name = row.querySelector('.name input').value.trim();
+    var start_date = row.querySelector('.start_date input').value;
+    var leaving_date = row.querySelector('.leaving_date input').value;
+    var leader = row.querySelector('.leader input').checked;
+    var part_time = row.querySelector('.part_time input').checked;
 
-    // Populate the skills container
-    var container = document.getElementById('skillsContainer');
-    container.innerHTML = ''; // Clear existing skills
-    personData.skills.forEach(function(skill) {
-        var skillDiv = document.createElement('div');
-        skillDiv.className = 'skill-item';
-        skillDiv.dataset.skillId = skill.id;
-
-        var skillNameSpan = document.createElement('span');
-        skillNameSpan.textContent = skill.name;
-        skillDiv.appendChild(skillNameSpan);
-
-        var removeButton = document.createElement('span');
-        removeButton.textContent = ' x';
-        removeButton.style.cursor = 'pointer';
-        removeButton.style.color = 'red';
-        removeButton.style.marginLeft = '5px';
-        removeButton.onclick = function() {
-            container.removeChild(skillDiv);
-        };
-        skillDiv.appendChild(removeButton);
-
-        var hiddenInput = document.createElement('input');
-        hiddenInput.type = 'hidden';
-        hiddenInput.name = 'skills';
-        hiddenInput.value = skill.id;
-        skillDiv.appendChild(hiddenInput);
-
-        container.appendChild(skillDiv);
+    // Gather skills
+    var skills = [];
+    row.querySelectorAll('.skills-container .skill-item').forEach(function(skillItem) {
+        var skillId = skillItem.querySelector('input[name="skills"]').value;
+        if (skillId) {
+            skills.push(skillId);
+        }
     });
-    document.getElementById('personFormContainer').scrollIntoView({ behavior: 'smooth' });
 
+    // Simple validation
+    if (!name || !start_date || !leaving_date) {
+        alert('Please fill in all required fields.');
+        return;
+    }
+
+    // Prepare data to send
+    var data = {
+        name: name,
+        start_date: start_date,
+        leaving_date: leaving_date,
+        leader: leader,
+        part_time: part_time,
+        skills: skills
+    };
+
+    // Send data via fetch
+    fetch(`/people/edit_person/${personId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    }).then(response => response.json())
+      .then(data => {
+          if (data.message) {
+              location.reload(); // Or update the row dynamically without reloading
+          } else if (data.error) {
+              alert(`Error: ${data.error}`);
+          }
+      }).catch(error => {
+          console.error('Error:', error);
+          alert('An error occurred while saving changes.');
+      });
 }
 
-function switchToAddMode() {
-    // Set form title, action URL, and button text for adding
-    document.getElementById('formTitle').textContent = 'Add Person';
-    document.getElementById('personForm').action = "{{ url_for('people.add_person') }}";
-    document.getElementById('formSubmitButton').textContent = 'Add Person';
-    document.getElementById('cancelEditButton').style.display = 'none'; // Hide "Cancel Edit" button
+function cancelEdit(button) {
+    var row = button.closest('tr');
+    var personId = row.getAttribute('data-person-id');
 
-    // Clear form fields
-    document.getElementById('personId').value = '';
-    document.getElementById('name').value = '';
-    document.getElementById('start_date').value = '';
-    document.getElementById('leaving_date').value = '';
-    document.getElementById('leader').checked = false;
-    document.getElementById('part_time').checked = false;
-
-    // Clear skills container
-    document.getElementById('skillsContainer').innerHTML = '';
-}
-
-function editPerson(id) {
-    fetch(`/people/get_person/${id}`)
+    // Reload the row to its original state
+    fetch(`/people/get_person/${personId}`)
         .then(response => response.json())
         .then(data => {
-            switchToEditMode(data);
+            row.querySelector('.name').textContent = data.name;
+            row.querySelector('.start_date').textContent = data.start_date;
+            row.querySelector('.leaving_date').textContent = data.leaving_date;
+            row.querySelector('.leader').textContent = data.leader ? 'Yes' : 'No';
+            row.querySelector('.part_time').textContent = data.part_time ? 'Yes' : 'No';
+            row.querySelector('.skills').textContent = data.skills.join(', ');
+
+            // Toggle buttons
+            row.querySelector('.edit-button').style.display = 'inline';
+            row.querySelector('.delete-button').style.display = 'inline';
+            row.querySelector('.deactivate-button').style.display = 'inline';
+            row.querySelector('.save-button').style.display = 'none';
+            row.querySelector('.cancel-button').style.display = 'none';
+        }).catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while cancelling edit.');
         });
 }
 
-function confirmDelete(event) {
-    if (!confirm("Do you really want to delete?")) {
-        event.preventDefault();
+// Example: addNewPerson function
+function addNewPerson() {
+    // Gather data from inputs
+    var name = document.getElementById('new_name').value.trim();
+    var start_date = document.getElementById('new_start_date').value;
+    var leaving_date = document.getElementById('new_leaving_date').value;
+    var leader = document.getElementById('new_leader').checked;
+    var part_time = document.getElementById('new_part_time').checked;
+
+    // Gather skills
+    var skills = [];
+    document.querySelectorAll('#new_skills_container .skill-item').forEach(function(skillItem) {
+        var skillId = skillItem.querySelector('input[name="skills"]').value;
+        if (skillId) {
+            skills.push(skillId);
+        }
+    });
+
+    // Simple validation
+    if (!name || !start_date || !leaving_date) {
+        alert('Please fill in all required fields.');
+        return;
     }
+
+    // Prepare data to send
+    var data = {
+        name: name,
+        start_date: start_date,
+        leaving_date: leaving_date,
+        leader: leader,
+        part_time: part_time,
+        skills: skills
+    };
+
+    // Send data via fetch
+    fetch("/people/add_person", { // Ensure the URL matches the backend route
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    }).then(response => response.json())
+      .then(data => {
+          if (data.message) {
+              location.reload(); // Or append the new row dynamically without reloading
+          } else if (data.error) {
+              alert(`Error: ${data.error}`);
+          }
+      }).catch(error => {
+          console.error('Error:', error);
+          alert('An error occurred while adding person.');
+      });
 }
 </script>
+
+<style>
+/* Optional: Add some basic styling for better UX */
+.people-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.people-table th, .people-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+.people-table th {
+    background-color: #f2f2f2;
+    text-align: left;
+}
+
+.skill-item {
+    display: inline-block;
+    margin-right: 5px;
+    background-color: #e0e0e0;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.deactivated {
+    background-color: #f9d6d5;
+}
+</style>
 {% endblock %}
