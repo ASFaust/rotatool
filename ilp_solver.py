@@ -93,7 +93,7 @@ def are_shifts_in_proximity(shift1, shift2, proximity_minutes=20):
 
 def expand_shifts(shifts, start_of_next_week):
     all_shifts = []
-    morning_survey_shifts = []
+    any_day_groups = []
     shift_id = 0
 
     for shift in shifts:
@@ -106,37 +106,64 @@ def expand_shifts(shifts, start_of_next_week):
                     'shift': shift,
                     'start_time': shift_start,
                     'end_time': shift_end,
-                    'id': shift_id
+                    'id': shift_id,
+                    'skills': [ss.skill for ss in shift.shift_skills],
+                    'any_day': False
                 }
                 all_shifts.append(shift_data)
-                if shift.type == "Morning Survey":
-                    morning_survey_shifts.append(shift_data)
                 shift_id += 1
+        elif shift.day_of_the_week == "Any Day":
+            new_group = []
+            for i, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]):
+                shift_start = datetime.combine(start_of_next_week, shift.start_time) + timedelta(days=i)
+                shift_end = datetime.combine(start_of_next_week, shift.end_time) + timedelta(days=i)
+                shift_data = {
+                    'name': shift.name,
+                    'shift': shift,
+                    'start_time': shift_start,
+                    'end_time': shift_end,
+                    'id': shift_id,
+                    'skills': [ss.skill for ss in shift.shift_skills],
+                    'any_day': True
+                }
+                new_group.append(shift_data)
+                all_shifts.append(shift_data)
+                shift_id += 1
+            any_day_groups.append(new_group)
         else:
             shift_start = datetime.combine(start_of_next_week, shift.start_time)
+            #add the day of the week now:
+            shift_start = shift_start + timedelta(days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(shift.day_of_the_week))
             shift_end = datetime.combine(start_of_next_week, shift.end_time)
             shift_data = {
                 'name': shift.name,
                 'shift': shift,
                 'start_time': shift_start,
                 'end_time': shift_end,
-                'id': shift_id
+                'id': shift_id,
+                'skills': [ss.skill for ss in shift.shift_skills],
+                'any_day': False
             }
             all_shifts.append(shift_data)
-            if shift.type == "Morning Survey":
-                morning_survey_shifts.append(shift_data)
             shift_id += 1
 
-    return all_shifts, morning_survey_shifts
+    return all_shifts, any_day_groups
 
-def define_decision_variables(persons, all_shifts):
+def define_decision_variables(persons, all_shifts, any_day_groups):
     x = pulp.LpVariable.dicts("shifts", ((person.id, shift['id']) for person in persons for shift in all_shifts), cat='Binary')
     max_shifts = pulp.LpVariable("max_shifts", lowBound=0, cat="Integer")
     morning_survey_max_shifts = pulp.LpVariable("morning_survey_max_shifts", lowBound=0, cat="Integer")
     morning_survey_min_shifts = pulp.LpVariable("morning_survey_min_shifts", lowBound=0, cat="Integer")
-    return x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts
+    day_selection_vars = []
+    for group in any_day_groups:
+        #we need to add 7 binary variables, one for each day of the week, per group/shift
+        group_vars = []
+        for day in group:
+            group_vars.append(pulp.LpVariable(f"day_{day['id']}", cat="Binary"))
+        day_selection_vars.append(group_vars)
+    return x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts, day_selection_vars
 
-def add_constraints(prob, persons, all_shifts, x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts):
+def add_constraints(prob, persons, all_shifts, x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts, day_selection_vars, any_day_groups):
     # Disallow assigning shifts that start/end within 20 minutes of each other
     for person in persons:
         for i, shift1 in enumerate(all_shifts):
@@ -144,9 +171,26 @@ def add_constraints(prob, persons, all_shifts, x, max_shifts, morning_survey_max
                 if i < j and are_shifts_in_proximity(shift1, shift2):
                     prob += x[person.id, shift1['id']] + x[person.id, shift2['id']] <= 1
 
-    # Enforce number of people constraints on each shift
+    # Enforce number of people constraints on each shift (except for shifts that can be assigned to any day - they need to be handled separately)
     for shift in all_shifts:
-        prob += pulp.lpSum(x[person.id, shift['id']] for person in persons) == shift['shift'].number_of_people
+        if shift['any_day']:
+            continue
+        prob += pulp.lpSum(x[person.id, shift['id']] for person in persons) >= shift['shift'].number_of_people
+
+    for vars,group in zip(day_selection_vars, any_day_groups):
+        prob += pulp.lpSum(vars) == 1
+
+        shift_ids = [shift['id'] for shift in group]
+        all_persons_and_shifts = []
+        for person in persons:
+            for shift_id in shift_ids:
+                all_persons_and_shifts.append(x[person.id, shift_id])
+        prob += pulp.lpSum(all_persons_and_shifts) >= group[0]['shift'].number_of_people
+
+        for person in persons:
+            for i, shift_id in enumerate(shift_ids): #because shift_ids is ordered, we can do that
+                prob += x[person.id, shift_id] <= vars[i]
+
 
     # Ensure max_shifts is greater than or equal to the number of shifts assigned to any person
     for person in persons:
@@ -158,19 +202,30 @@ def add_constraints(prob, persons, all_shifts, x, max_shifts, morning_survey_max
         prob += morning_survey_max_shifts >= morning_survey_count
         prob += morning_survey_min_shifts <= morning_survey_count
 
+    # Enforce skill constraints: for each shift, every skill needs to be covered by at least one person
+    for shift in all_shifts:
+        for skill in shift['skills']:
+            #that means we first need to obtain the group of people that have that skill
+            skilled_people = [person for person in persons if skill in [ps.skill for ps in person.person_skills]]
+            #then we need to check if at least one of them is assigned to the shift
+            prob += pulp.lpSum(x[person.id, shift['id']] for person in skilled_people) >= 1
+
+
+
     # Minimize number of consecutive Morning Surveys for one person
-    for person in persons:
-        for shift1 in all_shifts:
-            if shift1['shift'].type == "Morning Survey":
-                for shift2 in all_shifts:
-                    if shift1['id'] == shift2['id']:
-                        continue
-                    total_days = (shift2['start_time'] - shift1['start_time']).total_seconds() / 86400
-                    if 0.8 < total_days < 1.2:
-                        prob += x[person.id, shift1['id']] + x[person.id, shift2['id']] <= 1
+    ###for person in persons:
+    #    for shift1 in all_shifts:
+    ##        if shift1['shift'].type == "Morning Survey":
+    #            for shift2 in all_shifts:
+    #                if shift1['id'] == shift2['id']:
+    #                    continue
+    #                total_days = (shift2['start_time'] - shift1['start_time']).total_seconds() / 86400
+    #                if 0.8 < total_days < 1.2:
+    #                    prob += x[person.id, shift1['id']] + x[person.id, shift2['id']] <= 1
 
 def set_objective(prob, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts):
     prob.setObjective(max_shifts + (morning_survey_max_shifts - morning_survey_min_shifts))
+
 def solve_ilp():
     # Define the problem
     prob = pulp.LpProblem("ShiftScheduling", pulp.LpMinimize)
@@ -179,21 +234,21 @@ def solve_ilp():
     persons = Person.query.all()
     shifts = Shift.query.all()
 
-    # Calculate start of next week
+    # Calculate start of next weekday_selection_vars
     now = datetime.now()
     days_until_next_monday = (7 - now.weekday()) % 7
     if days_until_next_monday == 0:
         days_until_next_monday = 7
     start_of_next_week = (now + timedelta(days=days_until_next_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Expand shifts
-    all_shifts, morning_survey_shifts = expand_shifts(shifts, start_of_next_week)
+    # Expand shifts. any_day_groups is a list of lists that each represent a shift that can be assigned to any day.
+    all_shifts, any_day_groups = expand_shifts(shifts, start_of_next_week)
 
     # Define decision variables
-    x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts = define_decision_variables(persons, all_shifts)
+    x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts, day_selection_vars = define_decision_variables(persons, all_shifts, any_day_groups)
 
     # Add constraints
-    add_constraints(prob, persons, all_shifts, x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts)
+    add_constraints(prob, persons, all_shifts, x, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts, day_selection_vars, any_day_groups)
 
     # Set objective
     set_objective(prob, max_shifts, morning_survey_max_shifts, morning_survey_min_shifts)
