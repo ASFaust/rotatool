@@ -142,6 +142,7 @@ function makeSkillsEditable(row) {
                 <div class="skill-item" data-skill-id="">
                     <span>${skill}</span>
                     <span style="cursor: pointer; color: red; margin-left: 5px;" onclick="removeSkill(this)">x</span>
+                    <input type="hidden" name="skills" value="${skill}">
                 </div>
             `).join('')}
         </div>
@@ -307,12 +308,15 @@ function saveRow(button) {
       .then(data => {
           if (data.message) {
               location.reload(); // Or update the row dynamically without reloading
+              // set the row back to non-editable state:
+              // via calling the cancelEdit function
+              cancelEdit(button);
           } else if (data.error) {
               alert(`Error: ${data.error}`);
           }
       }).catch(error => {
           console.error('Error:', error);
-          alert('An error occurred while saving changes.');
+          alert('An error occurred while saving changes: ' + error);
       });
 }
 
