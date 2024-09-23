@@ -16,31 +16,9 @@
         </tr>
     </thead>
     <tbody>
-        {% for item in people %}
-        <tr class="{{ 'deactivated' if not item.person.activated else '' }}" data-person-id="{{ item.person.id }}">
-            <td class="name">{{ item.person.name }}</td>
-            <td class="start_date">{{ item.person.start_date }}</td>
-            <td class="leaving_date">{{ item.person.leaving_date }}</td>
-            <td class="leader">{{ 'Yes' if item.person.leader else 'No' }}</td>
-            <td class="part_time">{{ 'Yes' if item.person.part_time else 'No' }}</td>
-            <td class="skills">{{ item.skills | join(', ') }}</td>
-            <td>
-                <button type="button" class="edit-button" onclick="editRow(this)">Edit</button>
-                <button type="button" class="save-button" onclick="saveRow(this)" style="display:none;">Save</button>
-                <button type="button" class="cancel-button" onclick="cancelEdit(this)" style="display:none;">Cancel</button>
-                <form action="/people/delete_person/{{ item.person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
-                    <button type="submit" class="delete-button">Delete</button>
-                </form>
-                <button type="button" class="deactivate-button" onclick="toggleActive('{{ item.person.id }}', {{ 'true' if item.person.activated else 'false' }})">
-                    {{ 'Deactivate' if item.person.activated else 'Activate' }}
-                </button>
-            </td>
-        </tr>
-        {% endfor %}
-        <!-- Row for Adding New Person -->
         <tr id="addNewRow">
             <td>
-                <input type="text" id="new_name" name="name" placeholder="Name" required>
+                <input type="text" id="new_name" name="name" placeholder="Enter new name" required>
             </td>
             <td>
                 <input type="date" id="new_start_date" name="start_date" required>
@@ -72,6 +50,29 @@
                 <button type="button" onclick="addNewPerson()">Add Person</button>
             </td>
         </tr>
+        {% for item in people %}
+        <tr class="{{ 'deactivated' if not item.person.activated else '' }}" data-person-id="{{ item.person.id }}">
+            <td class="name">{{ item.person.name }}</td>
+            <td class="start_date">{{ item.person.start_date }}</td>
+            <td class="leaving_date">{{ item.person.leaving_date }}</td>
+            <td class="leader">{{ 'Yes' if item.person.leader else 'No' }}</td>
+            <td class="part_time">{{ 'Yes' if item.person.part_time else 'No' }}</td>
+            <td class="skills">{{ item.skills | join(', ') }}</td>
+            <td>
+                <button type="button" class="edit-button" onclick="editRow(this)">Edit</button>
+                <button type="button" class="save-button" onclick="saveRow(this)" style="display:none;">Save</button>
+                <button type="button" class="cancel-button" onclick="cancelEdit(this)" style="display:none;">Cancel</button>
+                <form action="/people/delete_person/{{ item.person.id }}" method="POST" style="display:inline;" onsubmit="confirmDelete(event)">
+                    <button type="submit" class="delete-button">Delete</button>
+                </form>
+                <button type="button" class="deactivate-button" onclick="toggleActive('{{ item.person.id }}', {{ 'true' if item.person.activated else 'false' }})">
+                    {{ 'Deactivate' if item.person.activated else 'Activate' }}
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+        <!-- Row for Adding New Person -->
+
     </tbody>
 </table>
 
@@ -272,12 +273,12 @@ function saveRow(button) {
     var leader = row.querySelector('.leader input').checked;
     var part_time = row.querySelector('.part_time input').checked;
 
-    // Gather skills
+    //Gather skills
     var skills = [];
     row.querySelectorAll('.skills-container .skill-item').forEach(function(skillItem) {
-        var skillId = skillItem.querySelector('input[name="skills"]').value;
-        if (skillId) {
-            skills.push(skillId);
+        var skillName = skillItem.querySelector('span').textContent.trim();
+        if (skillName) {
+            skills.push(skillName);
         }
     });
 
@@ -308,9 +309,6 @@ function saveRow(button) {
       .then(data => {
           if (data.message) {
               location.reload(); // Or update the row dynamically without reloading
-              // set the row back to non-editable state:
-              // via calling the cancelEdit function
-              cancelEdit(button);
           } else if (data.error) {
               alert(`Error: ${data.error}`);
           }
@@ -333,7 +331,7 @@ function cancelEdit(button) {
             row.querySelector('.leaving_date').textContent = data.leaving_date;
             row.querySelector('.leader').textContent = data.leader ? 'Yes' : 'No';
             row.querySelector('.part_time').textContent = data.part_time ? 'Yes' : 'No';
-            row.querySelector('.skills').textContent = data.skills.join(', ');
+            row.querySelector('.skills').textContent = data.skills.map(skill => skill.name).join(', ');
 
             // Toggle buttons
             row.querySelector('.edit-button').style.display = 'inline';

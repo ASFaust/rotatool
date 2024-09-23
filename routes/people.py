@@ -33,11 +33,9 @@ def add_person():
             leader = data.get('leader', False)
             part_time = data.get('part_time', False)
             skills = data.get('skills', [])
-            # Assuming 'activated' is always True when adding a new person
-            activated = True
 
-            day_off_every = 10  # Default value or adjust as needed
-            days_off_total = math.ceil(float((leaving_date - start_date).days) / float(day_off_every))
+            # 'activated' is always True when adding a new person
+            activated = True
 
             new_person = Person(
                 name=name,
@@ -45,9 +43,6 @@ def add_person():
                 leaving_date=leaving_date,
                 leader=leader,
                 part_time=part_time,
-                day_off_every=day_off_every,
-                days_off_past=0,
-                days_off_total=days_off_total,
                 activated=activated
             )
             db.session.add(new_person)
@@ -137,20 +132,27 @@ def edit_person(person_id):
                 person.part_time = data.get('part_time', False)
 
                 # Update skills
-                skills = data.get('skills', [])
+                skill_names = data.get('skills', []) #this is a list of skill names
+                skills = Skill.query.filter(Skill.name.in_(skill_names)).all()
+                print("old skills: ")
+                print(PersonSkill.query.filter_by(person_id=person.id).all())
+
+                print("new skills: ")
+                print([skill.name for skill in skills])
+
                 # Remove existing skills
                 PersonSkill.query.filter_by(person_id=person.id).delete()
                 # Add new skills
-                for skill_id in skills:
-                    skill = Skill.query.get(int(skill_id))
-                    if skill:
-                        person_skill = PersonSkill(person_id=person.id, skill_id=skill.id)
-                        db.session.add(person_skill)
+
+                new_skill_names = []
+                for skill in skills:
+                    person_skill = PersonSkill(person_id=person.id, skill_id=skill.id)
+                    db.session.add(person_skill)
+                    new_skill_names.append(skill.name)
 
                 db.session.commit()
 
                 # Return success response
-                person_skills = [skill.name for skill in person.skills]
                 person_data = {
                     'id': person.id,
                     'name': person.name,
@@ -158,7 +160,7 @@ def edit_person(person_id):
                     'leaving_date': person.leaving_date.strftime('%Y-%m-%d'),
                     'leader': person.leader,
                     'part_time': person.part_time,
-                    'skills': person_skills,
+                    'skills': new_skill_names,
                     'activated': person.activated
                 }
                 return jsonify({'message': 'Person updated successfully.', 'person': person_data}), 200
@@ -167,35 +169,10 @@ def edit_person(person_id):
                 return jsonify({'error': f'Missing field: {str(e)}'}), 400
             except Exception as e:
                 db.session.rollback()
+                raise e
                 return jsonify({'error': str(e)}), 500
         else:
             return jsonify({'error': 'Person not found.'}), 404
-    else:
-        # Fallback to form submission if not JSON
-        person = Person.query.get(person_id)
-
-        if person:
-            try:
-                person.name = request.form['name']
-                person.start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
-                person.leaving_date = datetime.strptime(request.form['leaving_date'], '%Y-%m-%d')
-                person.leader = 'leader' in request.form
-                person.part_time = 'part_time' in request.form
-                person.days_off_past = int(request.form.get('days_off_past', person.days_off_past))
-                person.days_off_total = int(request.form.get('days_off_total', person.days_off_total))
-                person.day_off_every = int(request.form.get('day_off_every', person.day_off_every))
-                person.activated = 'activated' in request.form
-
-                # Update skills
-                skill_ids = request.form.getlist('skills')
-                person.person_skills = [PersonSkill(person_id=person.id, skill_id=int(skill_id)) for skill_id in skill_ids]
-
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                return f"Error: {str(e)}", 400
-
-        return redirect(url_for('people.people'))
 
 
 @people_bp.route('/get_person/<int:person_id>', methods=['GET'], endpoint='get_person')
