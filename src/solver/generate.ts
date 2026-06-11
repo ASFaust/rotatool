@@ -27,7 +27,18 @@ export interface GenerateSummary {
 export async function generateRoster(rangeStart: Date, rangeEnd: Date): Promise<GenerateSummary> {
   const data = getAppData();
   const ctx = buildModel(data, rangeStart, rangeEnd, busyIntervals(data));
-  const solution = await solveLP(ctx.lp);
+  const s = ctx.stats;
+  console.log(
+    `[rotatool] ILP: ${ctx.instances.length} instances, ${s.binaries} binaries, ` +
+      `${s.continuous} continuous, ${s.constraints} constraints, ${s.nonzeros} nonzeros`,
+  );
+  // Bounded solve: return the incumbent at the time limit, and accept any
+  // solution within 1% of optimal — balance-type objectives otherwise make
+  // branch-and-bound chase negligible penalty improvements for minutes.
+  const solution = await solveLP(ctx.lp, {
+    time_limit: data.solverSettings.solveTimeLimitSeconds,
+    mip_rel_gap: 0.01,
+  });
   const result = interpretSolution(solution, ctx);
   return applyGeneration(result, rangeStart, rangeEnd);
 }

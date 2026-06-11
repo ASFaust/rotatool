@@ -15,8 +15,8 @@ import type {
   AvailabilitySchema,
   ShiftTemplateSchema,
   ShiftRequirementSchema,
-  AnimosityPairSchema,
-  PreferenceSchema,
+  PersonPreferenceSchema,
+  ShiftPreferenceSchema,
   SolverSettingsSchema,
   LedgerShiftSchema,
   LedgerAssignmentSchema,
@@ -32,8 +32,8 @@ export type Person = z.infer<typeof PersonSchema>;
 export type Availability = z.infer<typeof AvailabilitySchema>;
 export type ShiftTemplate = z.infer<typeof ShiftTemplateSchema>;
 export type ShiftRequirement = z.infer<typeof ShiftRequirementSchema>;
-export type AnimosityPair = z.infer<typeof AnimosityPairSchema>;
-export type Preference = z.infer<typeof PreferenceSchema>;
+export type PersonPreference = z.infer<typeof PersonPreferenceSchema>;
+export type ShiftPreference = z.infer<typeof ShiftPreferenceSchema>;
 export type SolverSettings = z.infer<typeof SolverSettingsSchema>;
 export type LedgerShift = z.infer<typeof LedgerShiftSchema>;
 export type LedgerAssignment = z.infer<typeof LedgerAssignmentSchema>;
@@ -44,10 +44,12 @@ export type AssignmentStatus = LedgerAssignment["status"];
 
 // --- Transient expansion types (computed, never persisted) -----------------
 
-/** A concrete requirement on a materialised instance (ids resolved). */
+/** A concrete people slot on a materialised instance (ids resolved). */
 export interface InstanceRequirement {
-  attributeId: string;
+  /** ANDed attribute ids a person must all hold; empty = anyone qualifies. */
+  attributeIds: string[];
   count: number;
+  required: boolean;
 }
 
 /**
@@ -63,6 +65,8 @@ export interface ShiftInstance {
   templateId: string;
   start: Date;
   end: Date;
+  /** Rest period after `end` (template's breakMinutes); soft-blocks the person. */
+  breakMinutes: number;
   requirements: InstanceRequirement[];
   /** Present for strictTime/anyTime candidates competing within one window. */
   windowGroupId?: string;

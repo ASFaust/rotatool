@@ -10,18 +10,18 @@
   function addPref() {
     const first = $appData.persons[0];
     if (!first) return;
-    mutate((d) => d.preferences.push({ personId: first.id, shiftType: "", weight: 1 }));
+    mutate((d) => d.shiftPreferences.push({ personId: first.id, shiftType: "", weight: 1 }));
   }
   function update(index: number, patch: Record<string, unknown>) {
-    mutate((d) => Object.assign(d.preferences[index], patch));
+    mutate((d) => Object.assign(d.shiftPreferences[index], patch));
   }
   function remove(index: number) {
-    mutate((d) => d.preferences.splice(index, 1));
+    mutate((d) => d.shiftPreferences.splice(index, 1));
   }
 </script>
 
 <div class="view">
-  <h2>Preferences</h2>
+  <h2>Shift preferences</h2>
   <p class="hint">
     Soft bonuses or penalties for a person's preferred or avoided shift types and date ranges.
     Positive weight = preferred, negative = avoided. Leave a field blank to make it apply
@@ -39,7 +39,7 @@
         <tr><th>Person</th><th>Shift type</th><th>From</th><th>To</th><th>Weight</th><th></th></tr>
       </thead>
       <tbody>
-        {#each $appData.preferences as pref, i (i)}
+        {#each $appData.shiftPreferences as pref, i (i)}
           <tr>
             <td>
               <select value={pref.personId} onchange={(e) => update(i, { personId: e.currentTarget.value })}>
@@ -70,6 +70,6 @@
         {/each}
       </tbody>
     </table>
-    <div style="margin-top: 12px;"><button class="btn" onclick={addPref}>Add preference</button></div>
+    <div style="margin-top: 12px;"><button class="btn" onclick={addPref}>Add shift preference</button></div>
   {/if}
 </div>

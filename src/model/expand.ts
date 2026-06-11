@@ -84,6 +84,7 @@ export function expandTemplate(
       templateId: template.id,
       start,
       end: new Date(start.getTime() + template.durationMinutes * 60_000),
+      breakMinutes: template.breakMinutes,
       requirements,
       windowGroupId,
     });
@@ -140,7 +141,7 @@ export function expandAll(data: AppData, rangeStart: Date, rangeEnd: Date): Shif
   for (const template of data.shiftTemplates) {
     const reqs: InstanceRequirement[] = data.shiftRequirements
       .filter((r) => r.shiftId === template.id)
-      .map((r) => ({ attributeId: r.attributeId, count: r.count }));
+      .map((r) => ({ attributeIds: r.attributeIds, count: r.count, required: r.required }));
     expandTemplate(template, reqs, rangeStart, rangeEnd, out);
   }
   return out;

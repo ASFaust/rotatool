@@ -9,22 +9,22 @@
   function addPair() {
     const [a, b] = $appData.persons;
     if (!a || !b) return;
-    mutate((d) => d.animosity.push({ personAId: a.id, personBId: b.id, weight: 1 }));
+    mutate((d) => d.personPreferences.push({ personAId: a.id, personBId: b.id, weight: 1 }));
   }
   function update(index: number, patch: Record<string, unknown>) {
-    mutate((d) => Object.assign(d.animosity[index], patch));
+    mutate((d) => Object.assign(d.personPreferences[index], patch));
   }
   function remove(index: number) {
-    mutate((d) => d.animosity.splice(index, 1));
+    mutate((d) => d.personPreferences.splice(index, 1));
   }
 </script>
 
 <div class="view">
-  <h2>Animosity</h2>
+  <h2>Person preferences</h2>
   <p class="hint">
-    Pairs of people who shouldn't be scheduled together. This is a soft penalty (weighted), so
-    the rota degrades gracefully rather than becoming infeasible. Higher weight = stronger
-    avoidance.
+    Pairs of people with a co-assignment preference. Positive weight encourages scheduling them
+    together; negative weight discourages it. This is a soft bonus/penalty, so the rota degrades
+    gracefully rather than becoming infeasible. Higher absolute weight = stronger effect.
   </p>
 
   {#if $appData.persons.length < 2}
@@ -35,7 +35,7 @@
         <tr><th>Person A</th><th>Person B</th><th>Weight</th><th></th></tr>
       </thead>
       <tbody>
-        {#each $appData.animosity as pair, i (i)}
+        {#each $appData.personPreferences as pair, i (i)}
           <tr>
             <td>
               <select value={pair.personAId} onchange={(e) => update(i, { personAId: e.currentTarget.value })}>

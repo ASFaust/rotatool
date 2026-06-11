@@ -57,8 +57,8 @@ const SHEETS = {
   availability: "Availability",
   shifts: "Shifts",
   shiftRequirements: "ShiftRequirements",
-  animosity: "Animosity",
-  preferences: "Preferences",
+  personPreferences: "PersonPreferences",
+  shiftPreferences: "ShiftPreferences",
   solverSettings: "SolverSettings",
   ledgerShifts: "LedgerShifts",
   ledgerAssignments: "LedgerAssignments",
@@ -322,6 +322,7 @@ export function importWorkbook(input: ArrayBuffer | Uint8Array): ImportResult {
       optional: optBool(row.cell(["optional"]), "optional") ?? false,
       activated: optBool(row.cell(["activated", "active"]), "activated") ?? true,
       durationMinutes: reqNum(row.cell(["durationminutes", "duration"]), "durationMinutes"),
+      breakMinutes: optNum(row.cell(["breakminutes", "break"]), "breakMinutes") ?? 0,
       activationDateTime: reqDateTime(row.cell(["activationdatetime", "activation", "anchor"]), "activationDateTime"),
       frequency: {
         value: reqNum(row.cell(["frequencyvalue", "frequency"]), "frequencyValue"),
@@ -389,29 +390,48 @@ export function importWorkbook(input: ArrayBuffer | Uint8Array): ImportResult {
     });
   });
 
+  // People slots: `attributes` is a comma/semicolon-separated AND-list of
+  // attribute names (blank = anyone). Legacy header `attribute` (one name per
+  // row) is accepted as an alias.
+  const attrIdLower = new Map([...attrIdByName].map(([n, i]) => [n.toLowerCase(), i]));
   const shiftRequirements: AppData["shiftRequirements"] = [];
   eachRow(SHEETS.shiftRequirements, (row) => {
     const resolveTemplate = makeResolver(templateIdByName, SHEETS.shiftRequirements, errors);
     const shiftId = resolveTemplate(row.cell(["shift"]), "shift");
-    const attributeId = makeResolver(attrIdByName, SHEETS.shiftRequirements, errors)(row.cell(["attribute"]), "attribute");
-    if (!shiftId || !attributeId) return;
-    shiftRequirements.push({ shiftId, attributeId, count: reqNum(row.cell(["count"]), "count") });
+    if (!shiftId) return;
+    const attrCell = row.cell(["attributes", "attribute"]);
+    const names = (optStr(attrCell) ?? "").split(/[,;]/).map((s) => s.trim()).filter((s) => s !== "");
+    const attributeIds: string[] = [];
+    for (const name of names) {
+      const aid = attrIdLower.get(name.toLowerCase());
+      if (aid === undefined) {
+        errors.push({ sheet: SHEETS.shiftRequirements, cell: attrCell.ref, message: `Unknown attribute: "${name}"` });
+        return;
+      }
+      attributeIds.push(aid);
+    }
+    shiftRequirements.push({
+      shiftId,
+      attributeIds,
+      count: reqNum(row.cell(["count"]), "count"),
+      required: optBool(row.cell(["required"]), "required") ?? false,
+    });
   });
 
-  const animosity: AppData["animosity"] = [];
-  eachRow(SHEETS.animosity, (row) => {
-    const resolve = resolvePerson(SHEETS.animosity);
+  const personPreferences: AppData["personPreferences"] = [];
+  eachRow(SHEETS.personPreferences, (row) => {
+    const resolve = resolvePerson(SHEETS.personPreferences);
     const personAId = resolve(row.cell(["persona", "person a", "a"]), "personA");
     const personBId = resolve(row.cell(["personb", "person b", "b"]), "personB");
     if (!personAId || !personBId) return;
-    animosity.push({ personAId, personBId, weight: reqNum(row.cell(["weight"]), "weight") });
+    personPreferences.push({ personAId, personBId, weight: reqNum(row.cell(["weight"]), "weight") });
   });
 
-  const preferences: AppData["preferences"] = [];
-  eachRow(SHEETS.preferences, (row) => {
-    const personId = resolvePerson(SHEETS.preferences)(row.cell(["person"]), "person");
+  const shiftPreferences: AppData["shiftPreferences"] = [];
+  eachRow(SHEETS.shiftPreferences, (row) => {
+    const personId = resolvePerson(SHEETS.shiftPreferences)(row.cell(["person"]), "person");
     if (!personId) return;
-    preferences.push({
+    shiftPreferences.push({
       personId,
       shiftType: optStr(row.cell(["shifttype", "type"])) ?? "",
       dateRangeStart: optDateOnly(row.cell(["daterangestart", "start"]), "dateRangeStart"),
@@ -456,8 +476,8 @@ export function importWorkbook(input: ArrayBuffer | Uint8Array): ImportResult {
     availability,
     shiftTemplates,
     shiftRequirements,
-    animosity,
-    preferences,
+    personPreferences,
+    shiftPreferences,
     solverSettings,
     ledgerShifts,
     ledgerAssignments,
@@ -541,27 +561,27 @@ export function exportWorkbook(data: AppData): Uint8Array {
   ]);
 
   add(SHEETS.shifts, [
-    ["name", "type", "optional", "activated", "durationMinutes", "activationDateTime", "frequencyValue", "frequencyUnit", "placement", "anyTimeGranularityValue", "anyTimeGranularityUnit"],
+    ["name", "type", "optional", "activated", "durationMinutes", "breakMinutes", "activationDateTime", "frequencyValue", "frequencyUnit", "placement", "anyTimeGranularityValue", "anyTimeGranularityUnit"],
     ...data.shiftTemplates.map((s) => [
-      s.name, s.type, s.optional, s.activated, s.durationMinutes, s.activationDateTime,
+      s.name, s.type, s.optional, s.activated, s.durationMinutes, s.breakMinutes, s.activationDateTime,
       s.frequency.value, s.frequency.unit, s.placement,
       s.anyTimeGranularity?.value ?? "", s.anyTimeGranularity?.unit ?? "",
     ]),
   ]);
 
   add(SHEETS.shiftRequirements, [
-    ["shift", "attribute", "count"],
-    ...data.shiftRequirements.map((r) => [templateName(r.shiftId), attrName(r.attributeId), r.count]),
+    ["shift", "attributes", "count", "required"],
+    ...data.shiftRequirements.map((r) => [templateName(r.shiftId), r.attributeIds.map(attrName).join(", "), r.count, r.required]),
   ]);
 
-  add(SHEETS.animosity, [
+  add(SHEETS.personPreferences, [
     ["personA", "personB", "weight"],
-    ...data.animosity.map((a) => [personName(a.personAId), personName(a.personBId), a.weight]),
+    ...data.personPreferences.map((a) => [personName(a.personAId), personName(a.personBId), a.weight]),
   ]);
 
-  add(SHEETS.preferences, [
+  add(SHEETS.shiftPreferences, [
     ["person", "shiftType", "dateRangeStart", "dateRangeEnd", "weight"],
-    ...data.preferences.map((p) => [personName(p.personId), p.shiftType, p.dateRangeStart ?? "", p.dateRangeEnd ?? "", p.weight]),
+    ...data.shiftPreferences.map((p) => [personName(p.personId), p.shiftType, p.dateRangeStart ?? "", p.dateRangeEnd ?? "", p.weight]),
   ]);
 
   add(SHEETS.solverSettings, [["key", "value"], ...flattenSolverSettings(data.solverSettings)]);
@@ -641,8 +661,8 @@ export function createSeedData(): AppData {
       },
     ],
     shiftRequirements: [
-      { shiftId: eveningId, attributeId: cookId, count: 1 },
-      { shiftId: eveningId, attributeId: supId, count: 1 },
+      { shiftId: eveningId, attributeIds: [cookId], count: 1, required: true },
+      { shiftId: eveningId, attributeIds: [supId], count: 1, required: true },
     ],
     solverSettings: {},
   });

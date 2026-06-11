@@ -29,6 +29,10 @@ export async function solveLP(
   options?: Record<string, unknown>,
 ): Promise<HighsLikeSolution> {
   const highs = await loadHighs(locateFile);
-  // Silence the solver's console output by default.
+  // Silence the solver's console output by default. Presolve stays ON — it is
+  // a >10× speedup on realistic rosters. The HiGHS 1.14.2 presolve bug (wrongly
+  // pinning continuous auxiliary variables, repro: scripts/presolve-bug.mts)
+  // only affects Maximize models; LpBuilder.toLP() always emits Minimize with
+  // a negated objective to stay clear of it.
   return highs.solve(lp, { output_flag: false, ...options });
 }

@@ -19,6 +19,20 @@ interface Constraint {
   terms: Term[];
   op: Op;
   rhs: number;
+  /** What part of the formulation produced it (for the stats census). */
+  kind: string;
+}
+
+/** Model size counters, for logging/difficulty diagnostics. */
+export interface LpStats {
+  binaries: number;
+  integers: number;
+  continuous: number;
+  constraints: number;
+  /** Total constraint-matrix nonzeros (sum of terms over all constraints). */
+  nonzeros: number;
+  /** Census per constraint kind, sorted by count descending. */
+  constraintKinds: Record<string, { count: number; nonzeros: number }>;
 }
 
 export class LpBuilder {
@@ -46,17 +60,30 @@ export class LpBuilder {
     return name;
   }
 
-  /** A new continuous variable with bounds. */
+  /**
+   * A new continuous variable with bounds.
+   *
+   * WARNING: HiGHS 1.14.2 presolve mis-pins continuous auxiliary variables
+   * that appear in one constraint + the objective (column singletons),
+   * silently returning sub-optimal solutions as "Optimal" — repro in
+   * scripts/presolve-bug.mts. Rule: a continuous aux var is safe iff it
+   * appears in ≥2 constraints or has no objective coefficient; potential
+   * singletons (e.g. workload `over`, required `short`) must use addInteger
+   * (scaling units if needed, e.g. hours → minutes). Don't blanket-integerize:
+   * hundreds of integer aux vars stall MIP incumbent finding (the day-subtotal
+   * layer at month ranges went from "no roster in 30s" to near-optimal by
+   * going continuous).
+   */
   addContinuous(lb: number, ub: number): string {
     const name = `v${this.counter++}`;
     this.bounds.set(name, { lb, ub });
     return name;
   }
 
-  /** Add a linear constraint `sum(terms) op rhs`. */
-  addConstraint(terms: Term[], op: Op, rhs: number): void {
+  /** Add a linear constraint `sum(terms) op rhs`, tagged with its origin. */
+  addConstraint(terms: Term[], op: Op, rhs: number, kind = "other"): void {
     if (terms.length === 0) return;
-    this.constraints.push({ name: `c${this.conCounter++}`, terms, op, rhs });
+    this.constraints.push({ name: `c${this.conCounter++}`, terms, op, rhs, kind });
   }
 
   /** Set the objective; later calls replace earlier ones. */
@@ -72,6 +99,24 @@ export class LpBuilder {
 
   setSense(sense: Sense): void {
     this.sense = sense;
+  }
+
+  /** Current model size (integers also carry bounds, hence the subtraction). */
+  stats(): LpStats {
+    const byKind = new Map<string, { count: number; nonzeros: number }>();
+    for (const c of this.constraints) {
+      const e = byKind.get(c.kind) ?? byKind.set(c.kind, { count: 0, nonzeros: 0 }).get(c.kind)!;
+      e.count++;
+      e.nonzeros += c.terms.length;
+    }
+    return {
+      binaries: this.binaries.length,
+      integers: this.integers.length,
+      continuous: this.bounds.size - this.integers.length,
+      constraints: this.constraints.length,
+      nonzeros: this.constraints.reduce((s, c) => s + c.terms.length, 0),
+      constraintKinds: Object.fromEntries([...byKind].sort((a, b) => b[1].count - a[1].count)),
+    };
   }
 
   /** Read a variable's value from a HiGHS solution (rounded for integrality). */
@@ -129,8 +174,20 @@ function num(n: number): string {
   return n.toFixed(6).replace(/\.?0+$/, "");
 }
 
-/** Format a linear expression into LP text, e.g. "3 v0 - v1 + 2 v2". */
+/**
+ * Format a linear expression into LP text, e.g. "3 v0 - v1 + 2 v2".
+ *
+ * Duplicate variables are summed here: the HiGHS LP reader does *not* add up
+ * repeated entries ("v0 + 0.5 v0" parses as 0.5·v0, not 1.5·v0), and callers
+ * legitimately push the same variable from several objective terms (coverage +
+ * preferences + breaks).
+ */
 function fmtExpr(terms: Term[]): string {
+  if (terms.length > 1) {
+    const sums = new Map<string, number>();
+    for (const [name, coef] of terms) sums.set(name, (sums.get(name) ?? 0) + coef);
+    if (sums.size < terms.length) terms = [...sums];
+  }
   const parts: string[] = [];
   for (const [name, coef] of terms) {
     if (coef === 0) continue;

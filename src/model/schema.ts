@@ -20,8 +20,12 @@ import { z } from "zod";
 /**
  * Bumped whenever the persisted shape changes. Drives the migrate() chain in
  * persistence/migrate.ts so older workbooks keep loading.
+ *
+ * v2: ShiftRequirement gained `attributeIds` (ANDed list, was single
+ *     `attributeId`) and a `required` flag; handled by a preprocess shim on
+ *     the schema itself, so v1 data still parses everywhere.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** Non-empty identifier string (internal id or a name reference). */
 const id = z.string().min(1);
@@ -112,6 +116,13 @@ export const ShiftTemplateSchema = z.object({
   optional: z.boolean().default(false),
   activated: z.boolean().default(true),
   durationMinutes: z.number().positive(),
+  /**
+   * Rest period after each occurrence, in minutes. Doesn't count as worked
+   * time, but assigning the same person another shift that starts inside it
+   * incurs a penalty per violated minute (the `breaks` objective term) — soft
+   * blocking, unlike the hard proximity gap. 0 = no break.
+   */
+  breakMinutes: z.number().nonnegative().default(0),
   /** First occurrence: anchor date + hour:minute. */
   activationDateTime: isoDateTime,
   /** Repeat window width. */
@@ -121,24 +132,41 @@ export const ShiftTemplateSchema = z.object({
   anyTimeGranularity: DurationSchema.optional(),
 });
 
-/** Junction: a shift needs `count` people who have `attribute`. */
-export const ShiftRequirementSchema = z.object({
-  shiftId: id,
-  attributeId: id,
-  count: z.number().int().positive(),
-});
+/**
+ * A people slot on a shift: `count` people who each hold *all* of
+ * `attributeIds` (empty list = anyone qualifies). A person can occupy only one
+ * slot per shift occurrence. `required` makes unfilled seats in this slot a
+ * heavy penalty instead of an ordinary coverage shortfall.
+ */
+export const ShiftRequirementSchema = z.preprocess(
+  // v1 shape carried a single `attributeId`.
+  (val) => {
+    if (val !== null && typeof val === "object" && "attributeId" in val && !("attributeIds" in val)) {
+      const { attributeId, ...rest } = val as { attributeId: unknown };
+      return { ...rest, attributeIds: [attributeId] };
+    }
+    return val;
+  },
+  z.object({
+    shiftId: id,
+    attributeIds: z.array(id).default([]),
+    count: z.number().int().positive(),
+    required: z.boolean().default(false),
+  }),
+);
 
 // ---------------------------------------------------------------------------
-// Animosity + preferences
+// Person preferences + shift preferences
 // ---------------------------------------------------------------------------
 
-export const AnimosityPairSchema = z.object({
+export const PersonPreferenceSchema = z.object({
   personAId: id,
   personBId: id,
+  /** Positive = encourage co-assignment, negative = discourage. */
   weight: z.number(),
 });
 
-export const PreferenceSchema = z.object({
+export const ShiftPreferenceSchema = z.object({
   personId: id,
   shiftType: z.string(),
   dateRangeStart: isoDate.optional(),
@@ -155,13 +183,14 @@ export const PreferenceSchema = z.object({
 const Term = z.object({ enabled: z.boolean(), weight: z.number() });
 
 export const SolverSettingsSchema = z.object({
+  /**
+   * Stop the solve after this many seconds and keep the best roster found so
+   * far. Balance-type objectives (fairness, workload) produce long tails of
+   * tiny improvements that aren't worth waiting for.
+   */
+  solveTimeLimitSeconds: z.number().positive().default(30),
   /** Hard constraint: minimum gap between any two shifts for one person. */
   proximityGapMinutes: z.number().nonnegative().default(0),
-  /**
-   * Seat-assignment exactness for staffing requirements. false = simpler
-   * `>= count` coverage; true = per-(instance,requirement) seat vars.
-   */
-  seatAssignmentExact: z.boolean().default(false),
 
   coverage: Term.default({ enabled: true, weight: 1 }),
   workload: z
@@ -170,11 +199,43 @@ export const SolverSettingsSchema = z.object({
       weight: z.number(),
     })
     .default({ mode: "off", weight: 1 }),
-  shiftTypeFairness: Term.default({ enabled: false, weight: 1 }),
-  variety: Term.default({ enabled: false, weight: 1 }),
-  preferences: Term.default({ enabled: false, weight: 1 }),
-  animosity: Term.default({ enabled: false, weight: 1 }),
-  consecutiveSameType: Term.default({ enabled: false, weight: 1 }),
+  /**
+   * Relative fairness, independent of `workload` (which measures against each
+   * person's absolute target): penalize everyone's L1 deviation from their
+   * fair share of the total assigned hours, so load spreads evenly even when
+   * the per-person workload is unknown up front. Weight is per hour of
+   * deviation — defaults low so coverage stays dominant. `intervalDays`
+   * partitions the generation range into windows that are each balanced
+   * separately ("be fair every week"), so totals can't be evened out by
+   * front-loading one person; 0 balances the whole range at once.
+   */
+  fairness: z
+    .object({
+      enabled: z.boolean(),
+      weight: z.number(),
+      intervalDays: z.number().int().nonnegative().default(7),
+    })
+    .default({ enabled: false, weight: 0.1, intervalDays: 7 }),
+  /**
+   * Daily peak ("minimize the maximum overtime ratio"): per day, penalize the
+   * highest assigned-hours-to-daily-target ratio across people, so no one gets
+   * their shifts clumped into brutal single days. Relative to each person's
+   * daily rate (People → hours; people without a target count at the mean), so
+   * a 60 h/wk leader's 8-hour day weighs like a 40 h/wk volunteer's 5.7-hour
+   * day. Summed over days — every day's worst case counts, not just the
+   * range's single worst. Weight is per unit of ratio per day.
+   */
+  dailyPeak: Term.default({ enabled: false, weight: 1 }),
+  /**
+   * Breaks after shifts (Shifts → break): penalize each minute of a person's
+   * break that another of their shifts eats into. Soft, so a thin roster can
+   * still violate a break when nothing else works — weight is per hour of
+   * violated break time. Default-enabled: it only bites where a template
+   * actually declares a break.
+   */
+  breaks: Term.default({ enabled: true, weight: 1 }),
+  shiftPreferences: Term.default({ enabled: false, weight: 1 }),
+  personPreferences: Term.default({ enabled: false, weight: 1 }),
 });
 
 // ---------------------------------------------------------------------------
@@ -229,8 +290,8 @@ export const AppDataSchema = z.object({
   availability: z.array(AvailabilitySchema).default([]),
   shiftTemplates: z.array(ShiftTemplateSchema).default([]),
   shiftRequirements: z.array(ShiftRequirementSchema).default([]),
-  animosity: z.array(AnimosityPairSchema).default([]),
-  preferences: z.array(PreferenceSchema).default([]),
+  personPreferences: z.array(PersonPreferenceSchema).default([]),
+  shiftPreferences: z.array(ShiftPreferenceSchema).default([]),
   solverSettings: SolverSettingsSchema.prefault({}),
   ledgerShifts: z.array(LedgerShiftSchema).default([]),
   ledgerAssignments: z.array(LedgerAssignmentSchema).default([]),

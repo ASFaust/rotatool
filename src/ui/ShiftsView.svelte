@@ -27,9 +27,7 @@
   }
 
   function addRequirement(shiftId: string) {
-    const first = $appData.attributes[0];
-    if (!first) return;
-    mutate((d) => d.shiftRequirements.push({ shiftId, attributeId: first.id, count: 1 }));
+    mutate((d) => d.shiftRequirements.push({ shiftId, attributeIds: [], count: 1, required: false }));
   }
   function updateRequirement(index: number, patch: Record<string, unknown>) {
     mutate((d) => Object.assign(d.shiftRequirements[index], patch));
@@ -37,6 +35,20 @@
   function removeRequirement(index: number) {
     mutate((d) => d.shiftRequirements.splice(index, 1));
   }
+  function addRequirementAttribute(index: number, attributeId: string) {
+    if (!attributeId) return;
+    mutate((d) => {
+      const r = d.shiftRequirements[index];
+      if (!r.attributeIds.includes(attributeId)) r.attributeIds.push(attributeId);
+    });
+  }
+  function removeRequirementAttribute(index: number, attributeId: string) {
+    mutate((d) => {
+      const r = d.shiftRequirements[index];
+      r.attributeIds = r.attributeIds.filter((a) => a !== attributeId);
+    });
+  }
+  const attrName = (id: string) => $appData.attributes.find((a) => a.id === id)?.name ?? "?";
 </script>
 
 <div class="view">
@@ -44,7 +56,11 @@
   <p class="hint">
     Recurring shift definitions. Each repeats every <em>frequency</em> window starting at the
     <em>anchor</em>; <em>placement</em> controls how fixed each occurrence is. Add
-    <em>requirement slots</em> ("need N people with attribute X") to define staffing.
+    <em>people slots</em> ("need N people who are X and Y") to define staffing — no attributes
+    means anyone qualifies, and <em>required</em> seats are flagged when they can't be filled.
+    A <em>break</em> reserves rest time after each occurrence: it doesn't count as worked hours,
+    but the solver avoids starting the same person's next shift inside it (soft — see the
+    "Breaks after shifts" weight in Solver settings).
   </p>
 
   <div class="row" style="margin-bottom: 20px;">
@@ -97,6 +113,15 @@
             min="1"
             value={shift.durationMinutes}
             onchange={(e) => updateShiftTemplate(shift.id, { durationMinutes: Number(e.currentTarget.value) })}
+          />
+        </div>
+        <div class="field">
+          <span class="cap">Break after (minutes)</span>
+          <input
+            type="number"
+            min="0"
+            value={shift.breakMinutes}
+            onchange={(e) => updateShiftTemplate(shift.id, { breakMinutes: Math.max(0, Number(e.currentTarget.value)) })}
           />
         </div>
         <div class="field">
@@ -172,11 +197,12 @@
         </div>
       </div>
 
-      <!-- Requirement slots -->
+      <!-- People slots -->
       <div class="field">
-        <span class="cap">Staffing — requirement slots</span>
+        <span class="cap">Staffing — people slots</span>
         {#each requirements(shift.id) as { r, i } (i)}
-          <div class="row" style="margin-bottom: 4px;">
+          {@const remaining = $appData.attributes.filter((a) => !r.attributeIds.includes(a.id))}
+          <div class="row" style="margin-bottom: 4px; flex-wrap: wrap;">
             <span class="muted" style="font-size: 13px;">need</span>
             <input
               type="number"
@@ -185,20 +211,40 @@
               value={r.count}
               onchange={(e) => updateRequirement(i, { count: Number(e.currentTarget.value) })}
             />
-            <span class="muted" style="font-size: 13px;">people with</span>
-            <select value={r.attributeId} onchange={(e) => updateRequirement(i, { attributeId: e.currentTarget.value })}>
-              {#each $appData.attributes as a (a.id)}
-                <option value={a.id}>{a.name}</option>
+            {#if r.attributeIds.length === 0}
+              <span class="muted" style="font-size: 13px;">people (anyone)</span>
+            {:else}
+              <span class="muted" style="font-size: 13px;">people with</span>
+              {#each r.attributeIds as aid (aid)}
+                <span class="tag">
+                  {attrName(aid)}
+                  <button title="Remove attribute" onclick={() => removeRequirementAttribute(i, aid)}>×</button>
+                </span>
               {/each}
-            </select>
+            {/if}
+            {#if remaining.length > 0}
+              <select
+                value=""
+                onchange={(e) => { addRequirementAttribute(i, e.currentTarget.value); e.currentTarget.value = ""; }}
+              >
+                <option value="" disabled>+ attribute…</option>
+                {#each remaining as a (a.id)}
+                  <option value={a.id}>{a.name}</option>
+                {/each}
+              </select>
+            {/if}
+            <label class="row" style="gap: 4px; font-size: 13px;">
+              <input
+                type="checkbox"
+                checked={r.required}
+                onchange={(e) => updateRequirement(i, { required: e.currentTarget.checked })}
+              />
+              required
+            </label>
             <button class="btn danger icon" onclick={() => removeRequirement(i)}>×</button>
           </div>
         {/each}
-        {#if $appData.attributes.length === 0}
-          <p class="muted" style="font-size: 13px;">Define attributes first to add requirement slots.</p>
-        {:else}
-          <div><button class="btn ghost icon" onclick={() => addRequirement(shift.id)}>+ requirement slot</button></div>
-        {/if}
+        <div><button class="btn ghost icon" onclick={() => addRequirement(shift.id)}>+ people slot</button></div>
       </div>
     </div>
   {/each}

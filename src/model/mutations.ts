@@ -40,8 +40,8 @@ export function removePerson(id: string): void {
     d.persons = d.persons.filter((p) => p.id !== id);
     d.personAttributes = d.personAttributes.filter((pa) => pa.personId !== id);
     d.availability = d.availability.filter((a) => a.personId !== id);
-    d.animosity = d.animosity.filter((a) => a.personAId !== id && a.personBId !== id);
-    d.preferences = d.preferences.filter((p) => p.personId !== id);
+    d.personPreferences = d.personPreferences.filter((a) => a.personAId !== id && a.personBId !== id);
+    d.shiftPreferences = d.shiftPreferences.filter((p) => p.personId !== id);
     d.ledgerAssignments = d.ledgerAssignments.filter((la) => la.personId !== id);
   });
 }
@@ -68,7 +68,13 @@ export function removeAttribute(id: string): void {
   mutate((d) => {
     d.attributes = d.attributes.filter((a) => a.id !== id);
     d.personAttributes = d.personAttributes.filter((pa) => pa.attributeId !== id);
-    d.shiftRequirements = d.shiftRequirements.filter((r) => r.attributeId !== id);
+    // Drop the attribute from people slots; a slot reduced to no attributes is
+    // deleted rather than silently widened to "anyone".
+    d.shiftRequirements = d.shiftRequirements.filter((r) => {
+      if (!r.attributeIds.includes(id)) return true;
+      r.attributeIds = r.attributeIds.filter((a) => a !== id);
+      return r.attributeIds.length > 0;
+    });
   });
 }
 
@@ -108,6 +114,7 @@ export function addShiftTemplate(name: string): string {
       optional: false,
       activated: true,
       durationMinutes: 120,
+      breakMinutes: 0,
       activationDateTime: anchor,
       frequency: { value: 1, unit: "days" },
       placement: "strict",

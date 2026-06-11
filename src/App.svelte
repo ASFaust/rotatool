@@ -3,24 +3,26 @@
   import {
     importWorkbook,
     exportWorkbook,
-    createSeedData,
     type CellError,
   } from "./persistence/io";
+  import { EXAMPLES, type ExampleTemplate } from "./persistence/examples";
   import PeopleView from "./ui/PeopleView.svelte";
   import AttributesView from "./ui/AttributesView.svelte";
   import ShiftsView from "./ui/ShiftsView.svelte";
-  import AnimosityView from "./ui/AnimosityView.svelte";
-  import PreferencesView from "./ui/PreferencesView.svelte";
+  import PersonPreferencesView from "./ui/PersonPreferencesView.svelte";
+  import ShiftPreferencesView from "./ui/ShiftPreferencesView.svelte";
+  import SolverSettingsView from "./ui/SolverSettingsView.svelte";
   import LedgerView from "./ui/LedgerView.svelte";
 
-  type Tab = "overview" | "people" | "attributes" | "shifts" | "animosity" | "preferences" | "ledger";
+  type Tab = "overview" | "people" | "attributes" | "shifts" | "personPreferences" | "shiftPreferences" | "solver" | "ledger";
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "people", label: "People" },
     { id: "attributes", label: "Attributes" },
     { id: "shifts", label: "Shifts" },
-    { id: "animosity", label: "Animosity" },
-    { id: "preferences", label: "Preferences" },
+    { id: "personPreferences", label: "Person Prefs" },
+    { id: "shiftPreferences", label: "Shift Prefs" },
+    { id: "solver", label: "Solver" },
     { id: "ledger", label: "Ledger" },
   ];
   let tab = $state<Tab>("overview");
@@ -28,6 +30,7 @@
   let importErrors = $state<CellError[]>([]);
   let status = $state<string>("");
   let fileInput: HTMLInputElement;
+  let examplesOpen = $state(false);
 
   const counts = $derived([
     ["Persons", $appData.persons.length],
@@ -36,16 +39,17 @@
     ["Availability", $appData.availability.length],
     ["Shift templates", $appData.shiftTemplates.length],
     ["Shift requirements", $appData.shiftRequirements.length],
-    ["Animosity pairs", $appData.animosity.length],
-    ["Preferences", $appData.preferences.length],
+    ["Person preferences", $appData.personPreferences.length],
+    ["Shift preferences", $appData.shiftPreferences.length],
     ["Ledger shifts", $appData.ledgerShifts.length],
     ["Ledger assignments", $appData.ledgerAssignments.length],
   ] as const);
 
-  function loadExample() {
-    replaceAppData(createSeedData());
+  function loadExample(example: ExampleTemplate) {
+    replaceAppData(example.create());
     importErrors = [];
-    status = "Loaded the example dataset.";
+    status = `Loaded example "${example.name}".`;
+    examplesOpen = false;
   }
 
   function clearAll() {
@@ -99,11 +103,33 @@
   <div class="actions">
     <button class="btn ghost" onclick={() => fileInput.click()}>Import .xlsx…</button>
     <button class="btn ghost" onclick={saveWorkbook}>Save .xlsx</button>
-    <button class="btn ghost" onclick={loadExample}>Load example</button>
+    <div class="menu-wrap">
+      <button
+        class="btn ghost"
+        onclick={(e) => {
+          e.stopPropagation();
+          examplesOpen = !examplesOpen;
+        }}
+      >
+        Load example/template
+      </button>
+      {#if examplesOpen}
+        <div class="menu">
+          {#each EXAMPLES as example}
+            <button class="menu-item" onclick={() => loadExample(example)}>
+              <span class="menu-title">{example.name}</span>
+              <span class="menu-desc">{example.description}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <button class="btn ghost" onclick={clearAll}>Clear</button>
     <input bind:this={fileInput} type="file" accept=".xlsx" onchange={onFileChosen} hidden />
   </div>
 </header>
+
+<svelte:window onclick={() => (examplesOpen = false)} />
 
 <nav class="tabs">
   {#each tabs as t}
@@ -147,10 +173,12 @@
     <AttributesView />
   {:else if tab === "shifts"}
     <ShiftsView />
-  {:else if tab === "animosity"}
-    <AnimosityView />
-  {:else if tab === "preferences"}
-    <PreferencesView />
+  {:else if tab === "personPreferences"}
+    <PersonPreferencesView />
+  {:else if tab === "shiftPreferences"}
+    <ShiftPreferencesView />
+  {:else if tab === "solver"}
+    <SolverSettingsView />
   {:else if tab === "ledger"}
     <LedgerView />
   {/if}
@@ -178,6 +206,48 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+  }
+  .menu-wrap {
+    position: relative;
+  }
+  .menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 10;
+    min-width: 320px;
+    max-width: 420px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+  }
+  .menu-item {
+    font: inherit;
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .menu-item:hover {
+    background: var(--accent-bg);
+  }
+  .menu-title {
+    font-weight: 600;
+    color: var(--text-h);
+    font-size: 14px;
+  }
+  .menu-desc {
+    font-size: 12.5px;
+    color: var(--text);
   }
   .tabs {
     display: flex;
