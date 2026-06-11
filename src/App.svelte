@@ -11,8 +11,9 @@
   import ShiftsView from "./ui/ShiftsView.svelte";
   import AnimosityView from "./ui/AnimosityView.svelte";
   import PreferencesView from "./ui/PreferencesView.svelte";
+  import LedgerView from "./ui/LedgerView.svelte";
 
-  type Tab = "overview" | "people" | "attributes" | "shifts" | "animosity" | "preferences";
+  type Tab = "overview" | "people" | "attributes" | "shifts" | "animosity" | "preferences" | "ledger";
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "people", label: "People" },
@@ -20,6 +21,7 @@
     { id: "shifts", label: "Shifts" },
     { id: "animosity", label: "Animosity" },
     { id: "preferences", label: "Preferences" },
+    { id: "ledger", label: "Ledger" },
   ];
   let tab = $state<Tab>("overview");
 
@@ -149,6 +151,8 @@
     <AnimosityView />
   {:else if tab === "preferences"}
     <PreferencesView />
+  {:else if tab === "ledger"}
+    <LedgerView />
   {/if}
 </main>
 
