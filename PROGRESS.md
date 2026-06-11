@@ -208,6 +208,7 @@ scenario proving it changes the chosen assignment as expected.
   could swap to SheetJS's CDN build later.
 - The build warns about a >500 kB chunk — that's the HiGHS WASM/glue; acceptable
   (could lazy-load the solver later).
-- Memories worth reading: `ledger-generate-loop-design` (the Generate loop) and
-  `user-backend-dev-node-via-nvm` (env).
+- Design notes in [docs/notes/](docs/notes/): `ledger-generate-loop.md` (the
+  Generate/regenerate model — supersedes plan.md's materialize text) and
+  `dev-environment.md` (Node-via-nvm + working preferences).
 ```
