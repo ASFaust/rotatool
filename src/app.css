@@ -294,3 +294,171 @@ code {
     border-right-color: var(--border);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Shared app UI (Phase 2 views). Scoped under .view to avoid clashing */
+/* with any element defaults.                                          */
+/* ------------------------------------------------------------------ */
+
+.view {
+  text-align: left;
+}
+.view h2 {
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+.view .hint {
+  color: var(--text);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.view input,
+.view select,
+.view textarea {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  box-sizing: border-box;
+}
+.view input:focus,
+.view select:focus,
+.view textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+.view input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.view input[type="number"] {
+  width: 80px;
+}
+
+.btn {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+.btn:hover {
+  box-shadow: var(--shadow);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: var(--border);
+}
+.btn.icon {
+  padding: 2px 8px;
+  line-height: 1.4;
+}
+.btn.danger {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.4);
+  background: rgba(192, 57, 43, 0.08);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.card-head .grow {
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.field > label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 3px 6px 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  color: var(--text-h);
+}
+.tag button {
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+.tag button:hover {
+  color: #c0392b;
+}
+
+.view table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.view table.data th,
+.view table.data td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.view table.data th {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 12px;
+}
+.muted {
+  color: var(--text);
+}
+.empty {
+  color: var(--text);
+  font-style: italic;
+  padding: 12px 0;
+}
+.view .cap {
+  font-size: 12px;
+  color: var(--text);
+  display: block;
+  margin-bottom: 3px;
+}

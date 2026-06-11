@@ -6,13 +6,27 @@
     createSeedData,
     type CellError,
   } from "./persistence/io";
+  import PeopleView from "./ui/PeopleView.svelte";
+  import AttributesView from "./ui/AttributesView.svelte";
+  import ShiftsView from "./ui/ShiftsView.svelte";
+  import AnimosityView from "./ui/AnimosityView.svelte";
+  import PreferencesView from "./ui/PreferencesView.svelte";
 
-  // Errors from the most recent import (cleared on a clean load).
+  type Tab = "overview" | "people" | "attributes" | "shifts" | "animosity" | "preferences";
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "people", label: "People" },
+    { id: "attributes", label: "Attributes" },
+    { id: "shifts", label: "Shifts" },
+    { id: "animosity", label: "Animosity" },
+    { id: "preferences", label: "Preferences" },
+  ];
+  let tab = $state<Tab>("overview");
+
   let importErrors = $state<CellError[]>([]);
   let status = $state<string>("");
   let fileInput: HTMLInputElement;
 
-  // Live row counts for each sheet, derived from the store.
   const counts = $derived([
     ["Persons", $appData.persons.length],
     ["Attributes", $appData.attributes.length],
@@ -25,8 +39,6 @@
     ["Ledger shifts", $appData.ledgerShifts.length],
     ["Ledger assignments", $appData.ledgerAssignments.length],
   ] as const);
-
-  const totalRows = $derived(counts.reduce((sum, [, n]) => sum + n, 0));
 
   function loadExample() {
     replaceAppData(createSeedData());
@@ -53,17 +65,17 @@
       status =
         errors.length === 0
           ? `Imported "${file.name}" cleanly.`
-          : `Imported "${file.name}" with ${errors.length} issue(s) — see below.`;
+          : `Imported "${file.name}" with ${errors.length} issue(s) — see Overview.`;
+      if (errors.length > 0) tab = "overview";
     } catch (err) {
       status = `Could not read "${file.name}": ${err}`;
     } finally {
-      input.value = ""; // allow re-selecting the same file
+      input.value = "";
     }
   }
 
   function saveWorkbook() {
     const bytes = exportWorkbook($appData);
-    // Copy into a fresh ArrayBuffer-backed view (satisfies BlobPart typing).
     const blob = new Blob([new Uint8Array(bytes)], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
@@ -77,108 +89,131 @@
   }
 </script>
 
-<main>
-  <header>
-    <h1>Rotatool</h1>
-    <p class="tagline">Client-side rota generator — your data never leaves the browser.</p>
-  </header>
-
-  <div class="toolbar">
-    <button onclick={() => fileInput.click()}>Import .xlsx…</button>
-    <button onclick={saveWorkbook}>Save .xlsx</button>
-    <button onclick={loadExample}>Load example</button>
-    <button class="ghost" onclick={clearAll}>Clear</button>
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept=".xlsx"
-      onchange={onFileChosen}
-      hidden
-    />
+<header class="topbar">
+  <div class="brand">
+    <strong>Rotatool</strong>
+    <span class="muted">client-side rota generator</span>
   </div>
+  <div class="actions">
+    <button class="btn ghost" onclick={() => fileInput.click()}>Import .xlsx…</button>
+    <button class="btn ghost" onclick={saveWorkbook}>Save .xlsx</button>
+    <button class="btn ghost" onclick={loadExample}>Load example</button>
+    <button class="btn ghost" onclick={clearAll}>Clear</button>
+    <input bind:this={fileInput} type="file" accept=".xlsx" onchange={onFileChosen} hidden />
+  </div>
+</header>
 
-  {#if status}
-    <p class="status">{status}</p>
-  {/if}
+<nav class="tabs">
+  {#each tabs as t}
+    <button class="tab" class:active={tab === t.id} onclick={() => (tab = t.id)}>{t.label}</button>
+  {/each}
+</nav>
 
-  <section class="summary">
-    <h2>Loaded data <span class="muted">({totalRows} rows)</span></h2>
-    <ul>
-      {#each counts as [label, n]}
-        <li><span class="count">{n}</span> {label}</li>
-      {/each}
-    </ul>
-  </section>
+{#if status}
+  <p class="status">{status}</p>
+{/if}
 
-  {#if importErrors.length > 0}
-    <section class="errors">
-      <h2>Import issues ({importErrors.length})</h2>
-      <p class="muted">These rows were skipped; everything else loaded.</p>
-      <table>
-        <thead>
-          <tr><th>Location</th><th>Problem</th></tr>
-        </thead>
-        <tbody>
-          {#each importErrors as e}
-            <tr>
-              <td class="cell-ref">{e.sheet}!{e.cell}</td>
-              <td>{e.message}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
+<main class="content">
+  {#if tab === "overview"}
+    <div class="view">
+      <h2>Overview</h2>
+      <p class="hint">Your data never leaves the browser. Save to .xlsx to back up or share.</p>
+      <ul class="summary">
+        {#each counts as [label, n]}
+          <li><span class="count">{n}</span> {label}</li>
+        {/each}
+      </ul>
+
+      {#if importErrors.length > 0}
+        <section style="margin-top: 24px;">
+          <h2>Import issues ({importErrors.length})</h2>
+          <p class="muted" style="font-size: 14px;">These rows were skipped; everything else loaded.</p>
+          <table class="data">
+            <thead><tr><th>Location</th><th>Problem</th></tr></thead>
+            <tbody>
+              {#each importErrors as e}
+                <tr><td class="cell-ref">{e.sheet}!{e.cell}</td><td>{e.message}</td></tr>
+              {/each}
+            </tbody>
+          </table>
+        </section>
+      {/if}
+    </div>
+  {:else if tab === "people"}
+    <PeopleView />
+  {:else if tab === "attributes"}
+    <AttributesView />
+  {:else if tab === "shifts"}
+    <ShiftsView />
+  {:else if tab === "animosity"}
+    <AnimosityView />
+  {:else if tab === "preferences"}
+    <PreferencesView />
   {/if}
 </main>
 
 <style>
-  main {
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 32px 24px 80px;
-    text-align: left;
-  }
-  header h1 {
-    margin: 0 0 4px;
-    font-size: 40px;
-  }
-  .tagline {
-    color: var(--text);
-    margin-bottom: 24px;
-  }
-  .toolbar {
+  .topbar {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
   }
-  button {
+  .brand strong {
+    font-size: 20px;
+    color: var(--text-h);
+    margin-right: 8px;
+  }
+  .brand .muted {
+    font-size: 13px;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .tab {
     font: inherit;
     font-size: 15px;
-    padding: 8px 14px;
-    border-radius: 6px;
-    border: 1px solid var(--accent-border);
-    background: var(--accent-bg);
-    color: var(--text-h);
+    padding: 10px 14px;
+    border: none;
+    background: none;
+    color: var(--text);
     cursor: pointer;
-    transition: box-shadow 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
   }
-  button:hover {
-    box-shadow: var(--shadow);
+  .tab:hover {
+    color: var(--text-h);
   }
-  button.ghost {
-    background: transparent;
-    border-color: var(--border);
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
   .status {
-    font-size: 15px;
+    margin: 16px 24px 0;
+    font-size: 14px;
     color: var(--text-h);
     background: var(--code-bg);
     padding: 8px 12px;
     border-radius: 6px;
-    margin-bottom: 20px;
   }
-  .summary ul {
+  .content {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .summary {
     list-style: none;
     padding: 0;
     margin: 8px 0 0;
@@ -195,26 +230,6 @@
     font-variant-numeric: tabular-nums;
     font-weight: 600;
     color: var(--accent);
-  }
-  .muted {
-    color: var(--text);
-    font-weight: 400;
-    font-size: 15px;
-  }
-  .errors {
-    margin-top: 28px;
-  }
-  .errors table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-    margin-top: 8px;
-  }
-  .errors th,
-  .errors td {
-    text-align: left;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--border);
   }
   .cell-ref {
     font-family: var(--mono);
