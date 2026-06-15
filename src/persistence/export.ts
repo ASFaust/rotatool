@@ -12,9 +12,16 @@
  */
 
 import type { AppData, Shift } from "../model/types";
+import { DEFAULT_SHIFT_TYPE_ID } from "../model/schema";
 import { formatDateTime } from "../util/dates";
 
 const pad = (n: number) => String(n).padStart(2, "0");
+
+/** A shift's type name for export, or "" for the default (untyped) type. */
+function typeLabel(data: AppData, shift: Shift): string {
+  if (shift.typeId === DEFAULT_SHIFT_TYPE_ID) return "";
+  return data.shiftTypes.find((t) => t.id === shift.typeId)?.name ?? "";
+}
 
 /** "2026-01-01T09:00:00" + minutes → "2026-01-01T11:00:00" (local, floating). */
 function addMinutesIso(iso: string, minutes: number): string {
@@ -47,12 +54,13 @@ export function ledgerToCsv(data: AppData): string {
   const rows: string[][] = [];
   for (const s of sortedShifts(data)) {
     const end = addMinutesIso(s.start, s.durationMinutes);
+    const type = typeLabel(data, s);
     const people = assignmentsFor(data, s);
     if (people.length === 0) {
-      rows.push([s.name, s.type, s.start, end, String(s.durationMinutes), ""]);
+      rows.push([s.name, type, s.start, end, String(s.durationMinutes), ""]);
     } else {
       for (const name of people) {
-        rows.push([s.name, s.type, s.start, end, String(s.durationMinutes), name]);
+        rows.push([s.name, type, s.start, end, String(s.durationMinutes), name]);
       }
     }
   }
@@ -99,8 +107,9 @@ export function ledgerToIcs(data: AppData, now: Date = new Date()): string {
 
   for (const s of sortedShifts(data)) {
     const people = assignmentsFor(data, s);
+    const type = typeLabel(data, s);
     const desc =
-      (s.type ? `Type: ${s.type}\n` : "") +
+      (type ? `Type: ${type}\n` : "") +
       (people.length ? "Assigned: " + people.join(", ") : "Unassigned");
 
     lines.push(
@@ -135,7 +144,7 @@ export function ledgerToPrintHtml(data: AppData): string {
       const who = people.length
         ? people.map((name) => htmlEscape(name)).join(", ")
         : `<span class="unassigned">unassigned</span>`;
-      return `<tr><td>${htmlEscape(s.name)}</td><td>${htmlEscape(s.type)}</td><td>${fmtWhen(s.start)}</td><td>${Math.round(s.durationMinutes / 60 * 10) / 10}h</td><td>${who}</td></tr>`;
+      return `<tr><td>${htmlEscape(s.name)}</td><td>${htmlEscape(typeLabel(data, s))}</td><td>${fmtWhen(s.start)}</td><td>${Math.round(s.durationMinutes / 60 * 10) / 10}h</td><td>${who}</td></tr>`;
     })
     .join("\n");
 

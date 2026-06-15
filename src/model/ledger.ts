@@ -20,6 +20,7 @@
  */
 
 import { getAppData, newId } from "./store";
+import { DEFAULT_SHIFT_TYPE_ID } from "./schema";
 import { mutate } from "./mutations";
 import { occurrences } from "./expand";
 import type { AppData, Shift, ShiftRequirement, ShiftTemplate } from "./types";
@@ -73,7 +74,7 @@ function isUnassigned(s: Shift): boolean {
  */
 function isUntouched(s: Shift, t: ShiftTemplate): boolean {
   if (!isUnassigned(s)) return false;
-  if (s.name !== t.name || s.type !== t.type || s.importance !== t.importance) return false;
+  if (s.name !== t.name || s.typeId !== t.typeId || s.importance !== t.importance) return false;
   if (s.durationMinutes !== t.durationMinutes || s.breakMinutes !== t.breakMinutes) return false;
   if (s.requirements.length !== t.requirements.length) return false;
   return s.requirements.every((a, i) => {
@@ -148,7 +149,7 @@ export function instanceTemplates(rangeStart: Date, rangeEnd: Date): InstanceRes
           d.shifts.push({
             id: newId(),
             name: t.name,
-            type: t.type,
+            typeId: t.typeId,
             importance: t.importance,
             start,
             durationMinutes: t.durationMinutes,
@@ -159,7 +160,7 @@ export function instanceTemplates(rangeStart: Date, rangeEnd: Date): InstanceRes
           created++;
         } else if (isUntouched(existing, t)) {
           existing.name = t.name;
-          existing.type = t.type;
+          existing.typeId = t.typeId;
           existing.importance = t.importance;
           existing.durationMinutes = t.durationMinutes;
           existing.breakMinutes = t.breakMinutes;
@@ -194,7 +195,7 @@ export function instanceTemplates(rangeStart: Date, rangeEnd: Date): InstanceRes
 /** Create a one-off concrete shift (no template); returns its id. */
 export function addShift(input: {
   name: string;
-  type?: string;
+  typeId?: string;
   start: string;
   durationMinutes: number;
   importance?: number;
@@ -205,7 +206,7 @@ export function addShift(input: {
     d.shifts.push({
       id,
       name: input.name,
-      type: input.type ?? "",
+      typeId: input.typeId ?? DEFAULT_SHIFT_TYPE_ID,
       importance: input.importance ?? 1,
       start: input.start,
       durationMinutes: input.durationMinutes,

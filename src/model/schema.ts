@@ -24,7 +24,7 @@
 import { z } from "zod";
 
 /** Bumped whenever the persisted shape changes. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** Non-empty identifier string (internal id or a name reference). */
 const id = z.string().min(1);
@@ -116,6 +116,28 @@ export const ShiftRequirementSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Shift types (org-defined categories — Shift Types tab)
+// ---------------------------------------------------------------------------
+
+/**
+ * Well-known id of the always-present default type. Every shift/template that
+ * has no explicit type points here; it can be renamed but never deleted, and
+ * deleting any other type reassigns its shifts back to this one.
+ */
+export const DEFAULT_SHIFT_TYPE_ID = "__default";
+
+/** A named shift category (org-defined), referenced by `typeId` on shifts. */
+export const ShiftTypeSchema = z.object({
+  id,
+  name: z.string().min(1),
+});
+
+/** A fresh default shift type, seeded into every new dataset. */
+export function defaultShiftType(): { id: string; name: string } {
+  return { id: DEFAULT_SHIFT_TYPE_ID, name: "Unassigned" };
+}
+
+// ---------------------------------------------------------------------------
 // Shift templates (repeating definitions — Shifts tab)
 // ---------------------------------------------------------------------------
 
@@ -129,8 +151,8 @@ export const DurationSchema = z.object({
 export const ShiftTemplateSchema = z.object({
   id,
   name: z.string().min(1),
-  /** Free-form shift type label (org-defined), used by fairness/preference terms. */
-  type: z.string().default(""),
+  /** Shift type category (id into `shiftTypes`), used by fairness/preference terms. */
+  typeId: id.default(DEFAULT_SHIFT_TYPE_ID),
   /** Coverage weight — how much it matters that this shift is filled (replaces `optional`). */
   importance: z.number().nonnegative().default(1),
   activated: z.boolean().default(true),
@@ -155,7 +177,7 @@ export const ShiftTemplateSchema = z.object({
 export const ShiftSchema = z.object({
   id,
   name: z.string().min(1),
-  type: z.string().default(""),
+  typeId: id.default(DEFAULT_SHIFT_TYPE_ID),
   importance: z.number().nonnegative().default(1),
   /** Concrete local datetime of this occurrence. */
   start: isoDateTime,
@@ -219,6 +241,7 @@ export const AppDataSchema = z.object({
   persons: z.array(PersonSchema).default([]),
   personAttributes: z.array(PersonAttributeSchema).default([]),
   availability: z.array(AvailabilitySchema).default([]),
+  shiftTypes: z.array(ShiftTypeSchema).default(() => [defaultShiftType()]),
   shiftTemplates: z.array(ShiftTemplateSchema).default([]),
   solverSettings: SolverSettingsSchema.prefault({}),
   shifts: z.array(ShiftSchema).default([]),

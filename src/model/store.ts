@@ -11,6 +11,7 @@
 import { writable, get } from "svelte/store";
 import { AppDataSchema, emptyAppData } from "./schema";
 import type { AppData } from "./types";
+import { migrate } from "../persistence/migrate";
 
 const STORAGE_KEY = "rotatool:appdata";
 
@@ -20,7 +21,7 @@ function loadInitial(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyAppData();
-    const parsed = AppDataSchema.safeParse(JSON.parse(raw));
+    const parsed = AppDataSchema.safeParse(migrate(JSON.parse(raw)));
     if (parsed.success) return parsed.data;
     console.warn("Stored data failed validation; starting empty.", parsed.error);
   } catch (err) {

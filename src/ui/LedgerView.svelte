@@ -303,7 +303,11 @@
         </div>
         <div class="field">
           <span class="cap">Type</span>
-          <input value={selected.type} onchange={(e) => updateShift(selected.id, { type: e.currentTarget.value.trim() })} />
+          <select value={selected.typeId} onchange={(e) => updateShift(selected.id, { typeId: e.currentTarget.value })}>
+            {#each $appData.shiftTypes as st (st.id)}
+              <option value={st.id}>{st.name}</option>
+            {/each}
+          </select>
         </div>
       </div>
 

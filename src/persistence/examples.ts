@@ -6,7 +6,7 @@
  * anything previously imported.
  */
 
-import { AppDataSchema, SCHEMA_VERSION } from "../model/schema";
+import { AppDataSchema, SCHEMA_VERSION, defaultShiftType } from "../model/schema";
 import type { AppData } from "../model/types";
 import { newId } from "../model/store";
 import { createSeedData } from "./io";
@@ -95,6 +95,16 @@ function createArchelonData(): AppData {
 
   const shiftTemplates: AppData["shiftTemplates"] = [];
 
+  // Shift types, minted on first use by the addTemplate helper below.
+  const shiftTypes: AppData["shiftTypes"] = [defaultShiftType()];
+  const typeId = (name: string): string => {
+    const existing = shiftTypes.find((t) => t.name === name);
+    if (existing) return existing.id;
+    const id = newId();
+    shiftTypes.push({ id, name });
+    return id;
+  };
+
   /** Add one repeating template; people slots are { attrs (ANDed), count, required? }. */
   const addTemplate = (
     name: string,
@@ -108,7 +118,7 @@ function createArchelonData(): AppData {
     shiftTemplates.push({
       id: newId(),
       name,
-      type,
+      typeId: typeId(type),
       importance: 1,
       activated: true,
       durationMinutes,
@@ -159,6 +169,7 @@ function createArchelonData(): AppData {
     persons,
     personAttributes,
     availability,
+    shiftTypes,
     shiftTemplates,
     // Open the Ledger on the whole month of July 2027.
     ledgerView: { from: "2027-07-01", to: "2027-07-31" },

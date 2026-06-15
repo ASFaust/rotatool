@@ -8,15 +8,17 @@
   import { EXAMPLES, type ExampleTemplate } from "./persistence/examples";
   import PeopleView from "./ui/PeopleView.svelte";
   import AttributesView from "./ui/AttributesView.svelte";
+  import ShiftTypesView from "./ui/ShiftTypesView.svelte";
   import ShiftsView from "./ui/ShiftsView.svelte";
   import SolverSettingsView from "./ui/SolverSettingsView.svelte";
   import LedgerView from "./ui/LedgerView.svelte";
 
-  type Tab = "overview" | "people" | "attributes" | "shifts" | "solver" | "ledger";
+  type Tab = "overview" | "people" | "attributes" | "shiftTypes" | "shifts" | "solver" | "ledger";
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "people", label: "People" },
     { id: "attributes", label: "Attributes" },
+    { id: "shiftTypes", label: "Shift Types" },
     { id: "shifts", label: "Shifts" },
     { id: "solver", label: "Solver" },
     { id: "ledger", label: "Ledger" },
@@ -33,6 +35,7 @@
     ["Attributes", $appData.attributes.length],
     ["Person attributes", $appData.personAttributes.length],
     ["Availability", $appData.availability.length],
+    ["Shift types", $appData.shiftTypes.length],
     ["Shift templates", $appData.shiftTemplates.length],
     ["Shifts (concrete)", $appData.shifts.length],
   ] as const);
@@ -161,6 +164,8 @@
     <PeopleView />
   {:else if tab === "attributes"}
     <AttributesView />
+  {:else if tab === "shiftTypes"}
+    <ShiftTypesView />
   {:else if tab === "shifts"}
     <ShiftsView />
   {:else if tab === "solver"}

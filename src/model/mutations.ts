@@ -8,7 +8,8 @@
  */
 
 import { appData, newId } from "./store";
-import type { AppData, Person, Attribute, ShiftTemplate, ShiftRequirement, TemplateRequirement } from "./types";
+import { DEFAULT_SHIFT_TYPE_ID } from "./schema";
+import type { AppData, Person, Attribute, ShiftType, ShiftTemplate, ShiftRequirement, TemplateRequirement } from "./types";
 
 /** Apply an in-place mutation to the dataset and trigger reactivity. */
 export function mutate(fn: (data: AppData) => void): void {
@@ -104,6 +105,37 @@ export function removePersonAttribute(personId: string, attributeId: string): vo
   });
 }
 
+// --- Shift types -----------------------------------------------------------
+
+export function addShiftType(name: string): string {
+  const id = newId();
+  mutate((d) => {
+    d.shiftTypes.push({ id, name });
+  });
+  return id;
+}
+
+export function updateShiftType(id: string, patch: Partial<ShiftType>): void {
+  mutate((d) => {
+    const t = d.shiftTypes.find((x) => x.id === id);
+    if (t) Object.assign(t, patch);
+  });
+}
+
+/**
+ * Delete a shift type and reassign every shift/template that used it back to the
+ * default type. The default type itself cannot be deleted. (Manual person-hours
+ * keyed to the type are merged into the default elsewhere — Person Hours tab.)
+ */
+export function removeShiftType(id: string): void {
+  if (id === DEFAULT_SHIFT_TYPE_ID) return;
+  mutate((d) => {
+    d.shiftTypes = d.shiftTypes.filter((t) => t.id !== id);
+    for (const t of d.shiftTemplates) if (t.typeId === id) t.typeId = DEFAULT_SHIFT_TYPE_ID;
+    for (const s of d.shifts) if (s.typeId === id) s.typeId = DEFAULT_SHIFT_TYPE_ID;
+  });
+}
+
 // --- Shift templates -------------------------------------------------------
 
 /** Create a shift template with sensible defaults; returns its id. */
@@ -115,7 +147,7 @@ export function addShiftTemplate(name: string): string {
     d.shiftTemplates.push({
       id,
       name,
-      type: "",
+      typeId: DEFAULT_SHIFT_TYPE_ID,
       importance: 1,
       activated: true,
       durationMinutes: 120,

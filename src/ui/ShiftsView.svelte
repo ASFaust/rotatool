@@ -107,7 +107,11 @@
     <div class="card">
       <div class="card-head">
         <input class="grow" value={shift.name} onchange={(e) => updateShiftTemplate(shift.id, { name: e.currentTarget.value.trim() })} style="font-size: 16px; font-weight: 600;" />
-        <input placeholder="type" value={shift.type} onchange={(e) => updateShiftTemplate(shift.id, { type: e.currentTarget.value.trim() })} style="width: 120px;" />
+        <select value={shift.typeId} onchange={(e) => updateShiftTemplate(shift.id, { typeId: e.currentTarget.value })} style="width: 140px;" title="Shift type">
+          {#each $appData.shiftTypes as st (st.id)}
+            <option value={st.id}>{st.name}</option>
+          {/each}
+        </select>
         <button class="btn danger icon" onclick={() => confirm(`Delete shift "${shift.name}"?`) && removeShiftTemplate(shift.id)}>Delete</button>
       </div>
 
@@ -188,7 +192,11 @@
     <div class="card">
       <div class="card-head">
         <input class="grow" value={shift.name} onchange={(e) => updateShift(shift.id, { name: e.currentTarget.value.trim() })} style="font-size: 16px; font-weight: 600;" />
-        <input placeholder="type" value={shift.type} onchange={(e) => updateShift(shift.id, { type: e.currentTarget.value.trim() })} style="width: 120px;" />
+        <select value={shift.typeId} onchange={(e) => updateShift(shift.id, { typeId: e.currentTarget.value })} style="width: 140px;" title="Shift type">
+          {#each $appData.shiftTypes as st (st.id)}
+            <option value={st.id}>{st.name}</option>
+          {/each}
+        </select>
         <button class="btn danger icon" onclick={() => confirm(`Delete shift "${shift.name}"?`) && removeShift(shift.id)}>Delete</button>
       </div>
 

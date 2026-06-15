@@ -6,9 +6,10 @@
  * lossless round-trip with zero ceremony.
  */
 
-import { AppDataSchema, SCHEMA_VERSION } from "../model/schema";
+import { AppDataSchema, SCHEMA_VERSION, defaultShiftType } from "../model/schema";
 import type { AppData } from "../model/types";
 import { newId } from "../model/store";
+import { migrate } from "./migrate";
 
 /** A problem encountered while importing (kept for the Overview error list). */
 export interface CellError {
@@ -32,7 +33,7 @@ export function importWorkbook(input: ArrayBuffer | Uint8Array): ImportResult {
   } catch (err) {
     return { data: AppDataSchema.parse({ meta: { schemaVersion: SCHEMA_VERSION, appVersion: "0.0.0" } }), errors: [{ sheet: "file", cell: "-", message: `Not valid JSON: ${err}` }] };
   }
-  const parsed = AppDataSchema.safeParse(raw);
+  const parsed = AppDataSchema.safeParse(migrate(raw));
   if (parsed.success) return { data: parsed.data, errors: [] };
   const errors = parsed.error.issues.map((i) => ({ sheet: String(i.path[0] ?? "?"), cell: i.path.join("."), message: i.message }));
   return { data: AppDataSchema.parse({ meta: { schemaVersion: SCHEMA_VERSION, appVersion: "0.0.0" } }), errors };
@@ -55,6 +56,7 @@ export function createSeedData(): AppData {
   const aliceId = newId();
   const bobId = newId();
   const carolId = newId();
+  const serviceTypeId = newId();
 
   return AppDataSchema.parse({
     meta: { schemaVersion: SCHEMA_VERSION, appVersion: "0.0.0" },
@@ -77,11 +79,12 @@ export function createSeedData(): AppData {
       { personId: bobId, kind: "available", start: "2026-01-01" },
       { personId: carolId, kind: "available", start: "2026-01-01" },
     ],
+    shiftTypes: [defaultShiftType(), { id: serviceTypeId, name: "service" }],
     shiftTemplates: [
       {
         id: newId(),
         name: "Evening Service",
-        type: "service",
+        typeId: serviceTypeId,
         importance: 1,
         activated: true,
         durationMinutes: 240,

@@ -11,6 +11,7 @@ import type {
   PersonAttributeSchema,
   PersonSchema,
   AvailabilitySchema,
+  ShiftTypeSchema,
   ShiftTemplateSchema,
   TemplateRequirementSchema,
   ShiftSchema,
@@ -27,6 +28,7 @@ export type Attribute = z.infer<typeof AttributeSchema>;
 export type PersonAttribute = z.infer<typeof PersonAttributeSchema>;
 export type Person = z.infer<typeof PersonSchema>;
 export type Availability = z.infer<typeof AvailabilitySchema>;
+export type ShiftType = z.infer<typeof ShiftTypeSchema>;
 export type ShiftTemplate = z.infer<typeof ShiftTemplateSchema>;
 export type TemplateRequirement = z.infer<typeof TemplateRequirementSchema>;
 export type Shift = z.infer<typeof ShiftSchema>;
