@@ -9,19 +9,15 @@
   import PeopleView from "./ui/PeopleView.svelte";
   import AttributesView from "./ui/AttributesView.svelte";
   import ShiftsView from "./ui/ShiftsView.svelte";
-  import PersonPreferencesView from "./ui/PersonPreferencesView.svelte";
-  import ShiftPreferencesView from "./ui/ShiftPreferencesView.svelte";
   import SolverSettingsView from "./ui/SolverSettingsView.svelte";
   import LedgerView from "./ui/LedgerView.svelte";
 
-  type Tab = "overview" | "people" | "attributes" | "shifts" | "personPreferences" | "shiftPreferences" | "solver" | "ledger";
+  type Tab = "overview" | "people" | "attributes" | "shifts" | "solver" | "ledger";
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "people", label: "People" },
     { id: "attributes", label: "Attributes" },
     { id: "shifts", label: "Shifts" },
-    { id: "personPreferences", label: "Person Prefs" },
-    { id: "shiftPreferences", label: "Shift Prefs" },
     { id: "solver", label: "Solver" },
     { id: "ledger", label: "Ledger" },
   ];
@@ -38,11 +34,7 @@
     ["Person attributes", $appData.personAttributes.length],
     ["Availability", $appData.availability.length],
     ["Shift templates", $appData.shiftTemplates.length],
-    ["Shift requirements", $appData.shiftRequirements.length],
-    ["Person preferences", $appData.personPreferences.length],
-    ["Shift preferences", $appData.shiftPreferences.length],
-    ["Ledger shifts", $appData.ledgerShifts.length],
-    ["Ledger assignments", $appData.ledgerAssignments.length],
+    ["Shifts (concrete)", $appData.shifts.length],
   ] as const);
 
   function loadExample(example: ExampleTemplate) {
@@ -82,16 +74,14 @@
 
   function saveWorkbook() {
     const bytes = exportWorkbook($appData);
-    const blob = new Blob([new Uint8Array(bytes)], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
+    const blob = new Blob([new Uint8Array(bytes)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "rotatool.xlsx";
+    a.download = "rotatool.json";
     a.click();
     URL.revokeObjectURL(url);
-    status = "Saved rotatool.xlsx.";
+    status = "Saved rotatool.json.";
   }
 </script>
 
@@ -101,8 +91,8 @@
     <span class="muted">client-side rota generator</span>
   </div>
   <div class="actions">
-    <button class="btn ghost" onclick={() => fileInput.click()}>Import .xlsx…</button>
-    <button class="btn ghost" onclick={saveWorkbook}>Save .xlsx</button>
+    <button class="btn ghost" onclick={() => fileInput.click()}>Import .json…</button>
+    <button class="btn ghost" onclick={saveWorkbook}>Save .json</button>
     <div class="menu-wrap">
       <button
         class="btn ghost"
@@ -125,7 +115,7 @@
       {/if}
     </div>
     <button class="btn ghost" onclick={clearAll}>Clear</button>
-    <input bind:this={fileInput} type="file" accept=".xlsx" onchange={onFileChosen} hidden />
+    <input bind:this={fileInput} type="file" accept=".json" onchange={onFileChosen} hidden />
   </div>
 </header>
 
@@ -145,7 +135,7 @@
   {#if tab === "overview"}
     <div class="view">
       <h2>Overview</h2>
-      <p class="hint">Your data never leaves the browser. Save to .xlsx to back up or share.</p>
+      <p class="hint">Your data never leaves the browser. Save to .json to back up or share.</p>
       <ul class="summary">
         {#each counts as [label, n]}
           <li><span class="count">{n}</span> {label}</li>
@@ -173,10 +163,6 @@
     <AttributesView />
   {:else if tab === "shifts"}
     <ShiftsView />
-  {:else if tab === "personPreferences"}
-    <PersonPreferencesView />
-  {:else if tab === "shiftPreferences"}
-    <ShiftPreferencesView />
   {:else if tab === "solver"}
     <SolverSettingsView />
   {:else if tab === "ledger"}
@@ -283,8 +269,6 @@
     border-radius: 6px;
   }
   .content {
-    max-width: 880px;
-    margin: 0 auto;
     padding: 24px;
   }
   .summary {

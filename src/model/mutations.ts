@@ -3,11 +3,12 @@
  *
  * `mutate(fn)` runs a mutator against the store and notifies subscribers. The
  * named helpers cover the operations that need care — chiefly deletes, which
- * must cascade to junction rows so no reference is left dangling.
+ * must cascade so no reference is left dangling. Concrete-shift operations
+ * (instancing, slot assignment) live in ledger.ts.
  */
 
 import { appData, newId } from "./store";
-import type { AppData, Person, Attribute, ShiftTemplate } from "./types";
+import type { AppData, Person, Attribute, ShiftTemplate, ShiftRequirement, TemplateRequirement } from "./types";
 
 /** Apply an in-place mutation to the dataset and trigger reactivity. */
 export function mutate(fn: (data: AppData) => void): void {
@@ -34,15 +35,15 @@ export function updatePerson(id: string, patch: Partial<Person>): void {
   });
 }
 
-/** Delete a person and every row that references them. */
+/** Delete a person and every row that references them; clear them from any slots. */
 export function removePerson(id: string): void {
   mutate((d) => {
     d.persons = d.persons.filter((p) => p.id !== id);
     d.personAttributes = d.personAttributes.filter((pa) => pa.personId !== id);
     d.availability = d.availability.filter((a) => a.personId !== id);
-    d.personPreferences = d.personPreferences.filter((a) => a.personAId !== id && a.personBId !== id);
-    d.shiftPreferences = d.shiftPreferences.filter((p) => p.personId !== id);
-    d.ledgerAssignments = d.ledgerAssignments.filter((la) => la.personId !== id);
+    for (const s of d.shifts)
+      for (const r of s.requirements)
+        r.slots = r.slots.map((slot) => (slot === id ? null : slot));
   });
 }
 
@@ -63,18 +64,22 @@ export function updateAttribute(id: string, patch: Partial<Attribute>): void {
   });
 }
 
+/** Strip an attribute from a requirement list; drop a requirement left empty. */
+function stripAttribute<R extends ShiftRequirement | TemplateRequirement>(reqs: R[], id: string): R[] {
+  return reqs.filter((r) => {
+    if (!r.attributeIds.includes(id)) return true;
+    r.attributeIds = r.attributeIds.filter((a) => a !== id);
+    return r.attributeIds.length > 0;
+  });
+}
+
 /** Delete an attribute and every row that references it. */
 export function removeAttribute(id: string): void {
   mutate((d) => {
     d.attributes = d.attributes.filter((a) => a.id !== id);
     d.personAttributes = d.personAttributes.filter((pa) => pa.attributeId !== id);
-    // Drop the attribute from people slots; a slot reduced to no attributes is
-    // deleted rather than silently widened to "anyone".
-    d.shiftRequirements = d.shiftRequirements.filter((r) => {
-      if (!r.attributeIds.includes(id)) return true;
-      r.attributeIds = r.attributeIds.filter((a) => a !== id);
-      return r.attributeIds.length > 0;
-    });
+    for (const t of d.shiftTemplates) t.requirements = stripAttribute(t.requirements, id);
+    for (const s of d.shifts) s.requirements = stripAttribute(s.requirements, id);
   });
 }
 
@@ -111,13 +116,13 @@ export function addShiftTemplate(name: string): string {
       id,
       name,
       type: "",
-      optional: false,
+      importance: 1,
       activated: true,
       durationMinutes: 120,
       breakMinutes: 0,
       activationDateTime: anchor,
       frequency: { value: 1, unit: "days" },
-      placement: "strict",
+      requirements: [],
     });
   });
   return id;
@@ -130,11 +135,10 @@ export function updateShiftTemplate(id: string, patch: Partial<ShiftTemplate>): 
   });
 }
 
-/** Delete a shift template and its requirement slots. */
+/** Delete a shift template. Its already-expanded instances are left in place. */
 export function removeShiftTemplate(id: string): void {
   mutate((d) => {
     d.shiftTemplates = d.shiftTemplates.filter((s) => s.id !== id);
-    d.shiftRequirements = d.shiftRequirements.filter((r) => r.shiftId !== id);
   });
 }
 

@@ -6,6 +6,15 @@ session. For the full product design, see [plan.md](plan.md). This file covers
 
 ---
 
+> **⚠ Doc drift (branch `shift-rework`, 2026-06-15).** A model rework is underway:
+> the status enum, flexible placements, and preference/workload/fairness solver
+> terms were removed. The model is now field-nullability based — a `Shift` has
+> requirement `slots: (personId|null)[]`; `null` slots are the only solver
+> variables. Three phases: plan (Shifts tab) → instance+adjust (Ledger) → assign
+> (solver). Persistence is now plain JSON (xlsx dropped). The phase notes below
+> and plan.md describe the **old** design — trust the code and the
+> `ledger-generate-loop-design` memory over them until they're rewritten.
+
 ## TL;DR
 
 A client-side rota generator: define people / attributes / shift templates →

@@ -94,63 +94,61 @@ function createArchelonData(): AppData {
   }
 
   const shiftTemplates: AppData["shiftTemplates"] = [];
-  const shiftRequirements: AppData["shiftRequirements"] = [];
 
-  /** Add one template; people slots are { attrs (ANDed), count, required? }. */
+  /** Add one repeating template; people slots are { attrs (ANDed), count, required? }. */
   const addTemplate = (
     name: string,
     type: string,
     time: string, // "HH:MM" on the June 1, 2027 anchor
     durationMinutes: number,
     frequencyDays: number,
-    placement: "strict" | "strictTime",
     slots: Array<{ attrs: AttrName[]; count: number; required?: boolean }>,
     breakMinutes = 0,
   ) => {
-    const id = newId();
     shiftTemplates.push({
-      id,
+      id: newId(),
       name,
       type,
-      optional: false,
+      importance: 1,
       activated: true,
       durationMinutes,
       breakMinutes,
       activationDateTime: `2027-06-01T${time}:00`,
       frequency: { value: frequencyDays, unit: "days" },
-      placement,
+      requirements: slots.map(({ attrs, count, required }) => ({
+        attributeIds: attrs.map((a) => attrId[a]),
+        count,
+        required: required ?? false,
+      })),
     });
-    for (const { attrs, count, required } of slots) {
-      shiftRequirements.push({ shiftId: id, attributeIds: attrs.map((a) => attrId[a]), count, required: required ?? false });
-    }
   };
 
   // Daily shifts (pinned day + time). Each MS team: 1 MS leader (required) + 2 anyone.
   for (const team of ["A", "B", "C"]) {
-    addTemplate(`Morning Survey ${team}`, "morning-survey", "05:00", 480, 1, "strict", [
+    addTemplate(`Morning Survey ${team}`, "morning-survey", "05:00", 480, 1, [
       { attrs: ["MS leader"], count: 1, required: true },
       { attrs: [], count: 2 },
     ]);
   }
-  addTemplate("MS Driver", "ms-driver", "05:00", 480, 1, "strict", [{ attrs: ["driver"], count: 1, required: true }]);
-  addTemplate("Cooking", "cooking", "14:00", 120, 1, "strict", [{ attrs: [], count: 2 }]);
+  addTemplate("MS Driver", "ms-driver", "05:00", 480, 1, [{ attrs: ["driver"], count: 1, required: true }]);
+  addTemplate("Cooking", "cooking", "14:00", 120, 1, [{ attrs: [], count: 2 }]);
   // Kiosk shifts abut (08–11, 11–14, 14–17); the 1h break makes back-to-back
   // kiosk for the same person cost an hour of violated break time.
-  addTemplate("Kiosk 1", "kiosk", "08:00", 180, 1, "strict", [{ attrs: [], count: 2 }], 60);
-  addTemplate("Kiosk 2", "kiosk", "11:00", 180, 1, "strict", [{ attrs: [], count: 2 }], 60);
-  addTemplate("Kiosk 3", "kiosk", "14:00", 180, 1, "strict", [{ attrs: [], count: 2 }], 60);
+  addTemplate("Kiosk 1", "kiosk", "08:00", 180, 1, [{ attrs: [], count: 2 }], 60);
+  addTemplate("Kiosk 2", "kiosk", "11:00", 180, 1, [{ attrs: [], count: 2 }], 60);
+  addTemplate("Kiosk 3", "kiosk", "14:00", 180, 1, [{ attrs: [], count: 2 }], 60);
 
-  // Weekly shifts (strictTime: the solver picks the day within each week).
-  // Five presentation templates ≙ five presentations per week, ≥1 presenter
-  // each. The presentation runs until 23:00; its 8h break (until 07:00)
-  // discourages putting the same person on a 05:00 morning survey next day.
+  // Weekly shifts pinned to a fixed day + time (the anchor weekday). Five
+  // presentation templates ≙ five presentations per week, ≥1 presenter each.
+  // The presentation's 8h break (until 07:00) discourages putting the same
+  // person on a 05:00 morning survey next day.
   for (let i = 1; i <= 5; i++) {
-    addTemplate(`Presentation ${i}`, "presentation", "19:00", 240, 7, "strictTime", [
+    addTemplate(`Presentation ${i}`, "presentation", "19:00", 240, 7, [
       { attrs: ["presenter"], count: 1, required: true },
       { attrs: [], count: 2 },
     ], 480);
   }
-  addTemplate("Grocery shop", "grocery", "10:00", 120, 7, "strictTime", [
+  addTemplate("Grocery shop", "grocery", "10:00", 120, 7, [
     { attrs: ["driver"], count: 1, required: true },
     { attrs: [], count: 1 },
   ]);
@@ -162,14 +160,6 @@ function createArchelonData(): AppData {
     personAttributes,
     availability,
     shiftTemplates,
-    shiftRequirements,
-    // Fairness spreads the dynamic workload across whoever is on site (per
-    // week), and dailyPeak keeps any one person's day from clumping; workload
-    // stays off — the hours targets only set relative shares here.
-    solverSettings: {
-      fairness: { enabled: true, weight: 0.1 },
-      dailyPeak: { enabled: true, weight: 1 },
-    },
   });
 }
 

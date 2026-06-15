@@ -11,7 +11,7 @@
  * match how the model stores `start` and how the rest of the app reasons.
  */
 
-import type { AppData, LedgerShift } from "../model/types";
+import type { AppData, Shift } from "../model/types";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -23,17 +23,16 @@ function addMinutesIso(iso: string, minutes: number): string {
 }
 
 /** Sort shifts chronologically, then by name, for stable export ordering. */
-function sortedShifts(data: AppData): LedgerShift[] {
-  return [...data.ledgerShifts].sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name));
+function sortedShifts(data: AppData): Shift[] {
+  return [...data.shifts].sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name));
 }
 
-/** People assigned to a shift, with status + note, in person-name order. */
-function assignmentsFor(data: AppData, shiftId: string) {
+/** People filling a shift's slots, in person-name order (empty slots ignored). */
+function assignmentsFor(data: AppData, shift: Shift) {
   const nameById = new Map(data.persons.map((p) => [p.id, p.name]));
-  return data.ledgerAssignments
-    .filter((a) => a.ledgerShiftId === shiftId)
-    .map((a) => ({ name: nameById.get(a.personId) ?? "?", status: a.status, note: a.note ?? "" }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const names: string[] = [];
+  for (const r of shift.requirements) for (const pid of r.slots) if (pid) names.push(nameById.get(pid) ?? "?");
+  return names.sort((a, b) => a.localeCompare(b));
 }
 
 // --- CSV --------------------------------------------------------------------
@@ -43,16 +42,16 @@ function csvCell(value: string): string {
 }
 
 export function ledgerToCsv(data: AppData): string {
-  const header = ["Shift", "Type", "Start", "End", "DurationMinutes", "Person", "Status", "Note"];
+  const header = ["Shift", "Type", "Start", "End", "DurationMinutes", "Person"];
   const rows: string[][] = [];
   for (const s of sortedShifts(data)) {
     const end = addMinutesIso(s.start, s.durationMinutes);
-    const people = assignmentsFor(data, s.id);
+    const people = assignmentsFor(data, s);
     if (people.length === 0) {
-      rows.push([s.name, s.type, s.start, end, String(s.durationMinutes), "", "", ""]);
+      rows.push([s.name, s.type, s.start, end, String(s.durationMinutes), ""]);
     } else {
-      for (const p of people) {
-        rows.push([s.name, s.type, s.start, end, String(s.durationMinutes), p.name, p.status, p.note]);
+      for (const name of people) {
+        rows.push([s.name, s.type, s.start, end, String(s.durationMinutes), name]);
       }
     }
   }
@@ -98,12 +97,10 @@ export function ledgerToIcs(data: AppData, now: Date = new Date()): string {
   ];
 
   for (const s of sortedShifts(data)) {
-    const people = assignmentsFor(data, s.id);
+    const people = assignmentsFor(data, s);
     const desc =
       (s.type ? `Type: ${s.type}\n` : "") +
-      (people.length
-        ? "Assigned: " + people.map((p) => `${p.name} (${p.status})${p.note ? ` — ${p.note}` : ""}`).join(", ")
-        : "Unassigned");
+      (people.length ? "Assigned: " + people.join(", ") : "Unassigned");
 
     lines.push(
       "BEGIN:VEVENT",
@@ -136,9 +133,9 @@ const fmtWhen = (iso: string) =>
 export function ledgerToPrintHtml(data: AppData): string {
   const rows = sortedShifts(data)
     .map((s) => {
-      const people = assignmentsFor(data, s.id);
+      const people = assignmentsFor(data, s);
       const who = people.length
-        ? people.map((p) => `${htmlEscape(p.name)} <span class="st">(${p.status})</span>`).join(", ")
+        ? people.map((name) => htmlEscape(name)).join(", ")
         : `<span class="unassigned">unassigned</span>`;
       return `<tr><td>${htmlEscape(s.name)}</td><td>${htmlEscape(s.type)}</td><td>${fmtWhen(s.start)}</td><td>${Math.round(s.durationMinutes / 60 * 10) / 10}h</td><td>${who}</td></tr>`;
     })
@@ -155,7 +152,7 @@ export function ledgerToPrintHtml(data: AppData): string {
   .unassigned { color: #c0392b; }
   @media print { body { margin: 0; } }
 </style></head><body>
-<h1>Rota — ${data.ledgerShifts.length} shift(s)</h1>
+<h1>Rota — ${data.shifts.length} shift(s)</h1>
 <table>
   <thead><tr><th>Shift</th><th>Type</th><th>When</th><th>Length</th><th>Assigned</th></tr></thead>
   <tbody>
