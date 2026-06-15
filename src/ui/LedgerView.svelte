@@ -4,6 +4,7 @@
   import {
     instanceTemplates,
     clearAssignmentsInRange,
+    removeShiftsInRange,
     updateShift,
     removeShift,
     addRequirement,
@@ -164,6 +165,12 @@
     const n = clearAssignmentsInRange(domainStart, domainEnd);
     status = `Cleared ${n} assignment(s).`;
   }
+  function doDeleteShifts() {
+    if (!confirm("Delete all shifts in this range? This cannot be undone.")) return;
+    const n = removeShiftsInRange(domainStart, domainEnd);
+    if (selected && !$appData.shifts.some((s) => s.id === selectedId)) selectedId = null;
+    status = `Deleted ${n} shift(s).`;
+  }
 
   // --- export ---------------------------------------------------------------
   function download(filename: string, content: string, mime: string) {
@@ -210,6 +217,7 @@
     <button class="btn" onclick={doPrefill}>Prefill timeframe</button>
     <button class="btn" onclick={doAssign} disabled={busy}>{busy ? "Assigning…" : "Assign people"}</button>
     <button class="btn ghost" onclick={doClear}>Clear assignments</button>
+    <button class="btn danger" onclick={doDeleteShifts}>Delete all shifts in range</button>
     <div class="field">
       <span class="cap">Zoom</span>
       <input type="range" min="0" max="100" bind:value={zoom} />

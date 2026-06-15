@@ -8,7 +8,7 @@
   // tunable weights — they always hold.
   const s = $derived($appData.solverSettings);
 
-  function patchTerm(key: "coverage" | "breaks", patch: { enabled?: boolean; weight?: number }) {
+  function patchTerm(key: "coverage" | "breaks" | "peakWindow", patch: { enabled?: boolean; weight?: number; windowHours?: number }) {
     mutate((d) => Object.assign(d.solverSettings[key], patch));
   }
   function setTimeLimit(seconds: number) {
@@ -56,6 +56,24 @@
         <p class="sub">{t.desc}</p>
       </div>
     {/each}
+
+    <div class="term">
+      <div class="term-head">
+        <label class="tcheck">
+          <input type="checkbox" checked={s.peakWindow.enabled} onchange={(e) => patchTerm("peakWindow", { enabled: e.currentTarget.checked })} />
+          <span class="tname">Flatten the busiest stretch</span>
+        </label>
+        {#if s.peakWindow.enabled}
+          <span class="cap">
+            window
+            <input type="number" min="1" step="1" value={s.peakWindow.windowHours} onchange={(e) => patchTerm("peakWindow", { windowHours: Math.max(1, Number(e.currentTarget.value)) })} />
+            h
+          </span>
+          <input class="weight" type="number" step="0.1" value={s.peakWindow.weight} onchange={(e) => patchTerm("peakWindow", { weight: Number(e.currentTarget.value) })} />
+        {/if}
+      </div>
+      <p class="sub">Penalize, per hour, the heaviest rolling window of assigned work faced by any one person across the whole range — shrinking the single worst stretch anyone works. A shift counts toward a window if it starts within it; hand-assigned time counts too.</p>
+    </div>
   </section>
 </div>
 
@@ -71,6 +89,9 @@
   .term-head { display: flex; align-items: center; gap: 12px; }
   .tcheck { display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .tname { font-size: 15px; color: var(--text-h); font-weight: 600; }
+  .cap { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13px; color: var(--text); }
+  .cap input { width: 4.5em; }
+  .cap + .weight { margin-left: 12px; }
   .weight { width: 6em; margin-left: auto; }
   input[type="number"] { width: 6em; }
 </style>

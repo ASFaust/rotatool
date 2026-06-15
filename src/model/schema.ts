@@ -24,7 +24,7 @@
 import { z } from "zod";
 
 /** Bumped whenever the persisted shape changes. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** Non-empty identifier string (internal id or a name reference). */
 const id = z.string().min(1);
@@ -204,6 +204,16 @@ export const PersonHoursSchema = z.object({
   hours: z.number().nonnegative(),
 });
 
+/**
+ * Persisted settings for the Person Hours "seed autofill" tool: the end date of
+ * the simulation and a relative weight per shift type (by id). A type with no
+ * entry defaults to weight 1 when the tool runs.
+ */
+export const PrefillSettingsSchema = z.object({
+  endDate: isoDate.optional(),
+  weights: z.record(z.string(), z.number().nonnegative()).default({}),
+});
+
 // ---------------------------------------------------------------------------
 // Solver settings (minimal: coverage + breaks)
 // ---------------------------------------------------------------------------
@@ -218,6 +228,16 @@ export const SolverSettingsSchema = z.object({
   coverage: Term.default({ enabled: true, weight: 1 }),
   /** Penalize a person's next shift eating into a declared break. */
   breaks: Term.default({ enabled: true, weight: 1 }),
+  /**
+   * Flatten the busiest stretch: penalize (per hour) the heaviest `windowHours`
+   * rolling window of assigned work faced by *any* person across the whole
+   * range — a min-max that shrinks the single worst stretch anyone works.
+   */
+  peakWindow: Term.extend({ windowHours: z.number().positive() }).default({
+    enabled: false,
+    weight: 1,
+    windowHours: 24,
+  }),
 });
 
 // ---------------------------------------------------------------------------
@@ -265,6 +285,8 @@ export const AppDataSchema = z.object({
   personHours: z.array(PersonHoursSchema).default([]),
   /** Persisted Ledger timeline window. */
   ledgerView: LedgerViewSchema.default(defaultLedgerView),
+  /** Persisted settings for the Person Hours seed-autofill tool. */
+  prefillSettings: PrefillSettingsSchema.prefault({}),
 });
 
 /** A fresh, empty dataset stamped with the current schema version. */

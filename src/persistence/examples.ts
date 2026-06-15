@@ -133,32 +133,39 @@ function createArchelonData(): AppData {
     });
   };
 
+  // Three shift types group the work: conservation (the morning surveys),
+  // camp work (cook/driver/grocery logistics) and PA work (public awareness:
+  // kiosk + presentations).
+  const CONSERVATION = "Conservation work";
+  const CAMP = "Camp work";
+  const PA = "PA work";
+
   // Daily shifts (pinned day + time). Each MS team: 1 MS leader (required) + 2 anyone.
   for (const team of ["A", "B", "C"]) {
-    addTemplate(`Morning Survey ${team}`, "morning-survey", "05:00", 480, 1, [
+    addTemplate(`Morning Survey ${team}`, CONSERVATION, "05:00", 480, 1, [
       { attrs: ["MS leader"], count: 1, required: true },
       { attrs: [], count: 2 },
     ]);
   }
-  addTemplate("MS Driver", "ms-driver", "05:00", 480, 1, [{ attrs: ["driver"], count: 1, required: true }]);
-  addTemplate("Cooking", "cooking", "14:00", 120, 1, [{ attrs: [], count: 2 }]);
+  addTemplate("MS Driver", CAMP, "05:00", 480, 1, [{ attrs: ["driver"], count: 1, required: true }]);
+  addTemplate("Cooking", CAMP, "14:00", 120, 1, [{ attrs: [], count: 2 }]);
   // Kiosk shifts abut (08–11, 11–14, 14–17); the 1h break makes back-to-back
   // kiosk for the same person cost an hour of violated break time.
-  addTemplate("Kiosk 1", "kiosk", "08:00", 180, 1, [{ attrs: [], count: 2 }], 60);
-  addTemplate("Kiosk 2", "kiosk", "11:00", 180, 1, [{ attrs: [], count: 2 }], 60);
-  addTemplate("Kiosk 3", "kiosk", "14:00", 180, 1, [{ attrs: [], count: 2 }], 60);
+  addTemplate("Kiosk 1", PA, "08:00", 180, 1, [{ attrs: [], count: 2 }], 60);
+  addTemplate("Kiosk 2", PA, "11:00", 180, 1, [{ attrs: [], count: 2 }], 60);
+  addTemplate("Kiosk 3", PA, "14:00", 180, 1, [{ attrs: [], count: 2 }], 60);
 
   // Weekly shifts pinned to a fixed day + time (the anchor weekday). Five
   // presentation templates ≙ five presentations per week, ≥1 presenter each.
   // The presentation's 8h break (until 07:00) discourages putting the same
   // person on a 05:00 morning survey next day.
   for (let i = 1; i <= 5; i++) {
-    addTemplate(`Presentation ${i}`, "presentation", "19:00", 240, 7, [
+    addTemplate(`Presentation ${i}`, PA, "19:00", 240, 7, [
       { attrs: ["presenter"], count: 1, required: true },
       { attrs: [], count: 2 },
     ], 480);
   }
-  addTemplate("Grocery shop", "grocery", "10:00", 120, 7, [
+  addTemplate("Grocery shop", CAMP, "10:00", 120, 7, [
     { attrs: ["driver"], count: 1, required: true },
     { attrs: [], count: 1 },
   ]);

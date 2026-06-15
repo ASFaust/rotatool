@@ -78,10 +78,23 @@ function v4ToV5(raw: Obj): Obj {
   };
 }
 
+/**
+ * v5 → v6: add `prefillSettings` (the Person Hours seed-autofill tool's end
+ * date + per-type weights). Purely additive — defaults are filled on parse.
+ */
+function v5ToV6(raw: Obj): Obj {
+  return {
+    ...raw,
+    prefillSettings: isObj(raw.prefillSettings) ? raw.prefillSettings : {},
+    meta: { ...(isObj(raw.meta) ? raw.meta : {}), schemaVersion: 6 },
+  };
+}
+
 /** Ordered migration steps; index by the *source* version they upgrade from. */
 const STEPS: Record<number, (raw: Obj) => Obj> = {
   3: v3ToV4,
   4: v4ToV5,
+  5: v5ToV6,
 };
 
 /**

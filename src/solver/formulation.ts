@@ -222,6 +222,59 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
     }
   }
 
+  // Peak window: flatten the single busiest stretch anyone works. One global
+  // aux var `peak` is pinned ≥ the assigned minutes in *every* rolling
+  // windowHours-long window faced by any person, and we penalize it — a min-max
+  // that shrinks the worst window across the whole roster.
+  //
+  // A window's load only changes at a person's shift starts, and the densest
+  // window can always be slid until its left edge sits on the earliest shift it
+  // holds (sliding loses no shift). So testing windows anchored at each person's
+  // own shift starts (candidate + hand-assigned) hits the exact continuous
+  // maximum — no time grid needed. A shift counts in full if its start lies in
+  // the window. `peak` is integer minutes: a trivial roster could leave it a
+  // column singleton, and one integer aux var is cheap (see addContinuous).
+  const peakCfg = data.solverSettings.peakWindow;
+  if (peakCfg.enabled && peakCfg.weight > 0) {
+    const perMinute = peakCfg.weight / 60; // weight is per hour of peak window
+    const windowMs = peakCfg.windowHours * 3_600_000;
+
+    interface DatedMin { start: number; min: number; v?: string }
+    const loadByPerson = new Map<string, DatedMin[]>();
+    const addLoad = (pid: string, x: DatedMin) =>
+      (loadByPerson.get(pid) ?? loadByPerson.set(pid, []).get(pid)!).push(x);
+    for (const [pid, segs] of seatVarsByPerson)
+      for (const s of segs) addLoad(pid, { start: s.start, min: (s.end - s.start) / 60_000, v: s.v });
+    for (const [pid, ivs] of busyByPerson)
+      for (const iv of ivs) addLoad(pid, { start: iv.start, min: (iv.end - iv.start) / 60_000 });
+
+    // A window can't hold more than all of a person's work; the largest such
+    // total bounds the peak. (Skip building the var if nobody works at all.)
+    let maxPossible = 0;
+    for (const [, items] of loadByPerson)
+      maxPossible = Math.max(maxPossible, items.reduce((s, i) => s + i.min, 0));
+
+    if (maxPossible > 0) {
+      const peak = b.addInteger(0, Math.ceil(maxPossible));
+      for (const [, items] of loadByPerson) {
+        const anchors = [...new Set(items.map((i) => i.start))].sort((a, c) => a - c);
+        for (const a of anchors) {
+          const inWindow = items.filter((i) => i.start >= a && i.start < a + windowMs);
+          const terms: [string, number][] = [];
+          let fixedSum = 0;
+          for (const i of inWindow) {
+            if (i.v) terms.push([i.v, i.min]);
+            else fixedSum += i.min; // hand-assigned: constant load
+          }
+          if (terms.length === 0 && fixedSum === 0) continue;
+          // Σ(min·x) + fixedSum ≤ peak  ⇔  Σ(min·x) − peak ≤ −fixedSum.
+          b.addConstraint([...terms, [peak, -1]], "<=", -fixedSum, "peakwin");
+        }
+      }
+      penalties.push([peak, -perMinute]);
+    }
+  }
+
   b.setObjective("max", [...coverage, ...penalties]);
   return { lp: b.toLP(), stats: b.stats(), seatsConsidered: seats.length, xVars };
 }

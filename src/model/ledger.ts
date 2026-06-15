@@ -300,6 +300,19 @@ export function clearAssignmentsInRange(rangeStart: Date, rangeEnd: Date): numbe
   return cleared;
 }
 
+/** Delete every shift whose start is in [rangeStart, rangeEnd). Returns shifts removed. */
+export function removeShiftsInRange(rangeStart: Date, rangeEnd: Date): number {
+  const startStr = fmtLocalDateTime(rangeStart);
+  const endStr = fmtLocalDateTime(rangeEnd);
+  let removed = 0;
+  mutate((d) => {
+    const before = d.shifts.length;
+    d.shifts = d.shifts.filter((s) => s.start < startStr || s.start >= endStr);
+    removed = before - d.shifts.length;
+  });
+  return removed;
+}
+
 // --- Reconciliation --------------------------------------------------------
 
 export interface AvailabilityConflict {

@@ -124,6 +124,20 @@ export function setPersonHours(personId: string, typeId: string, hours: number):
   });
 }
 
+/** Replace the entire seeded-hours table at once (used by the autofill tool). */
+export function setAllPersonHours(rows: import("./types").PersonHours[]): void {
+  mutate((d) => {
+    d.personHours = rows.filter((r) => r.hours > 0);
+  });
+}
+
+/** Patch the persisted seed-autofill settings (end date and/or per-type weights). */
+export function updatePrefillSettings(patch: Partial<import("./types").PrefillSettings>): void {
+  mutate((d) => {
+    Object.assign(d.prefillSettings, patch);
+  });
+}
+
 // --- Shift types -----------------------------------------------------------
 
 export function addShiftType(name: string): string {
