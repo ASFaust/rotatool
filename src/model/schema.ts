@@ -238,6 +238,19 @@ export const SolverSettingsSchema = z.object({
     weight: 1,
     windowHours: 24,
   }),
+  /**
+   * Balance total workload across people *proportional to each person's weekly
+   * target* — measure each person's hours (already-worked + newly-assigned) as a
+   * ratio of their weekly target (units: weeks), and even those ratios out.
+   * `mode` picks the shape: "deviation" pulls the whole roster toward a shared
+   * ratio (L1); "spread" only squeezes the gap between the busiest and idlest.
+   * People without a workload target carry no ratio and are left out.
+   */
+  fairness: Term.extend({ mode: z.enum(["spread", "deviation"]) }).default({
+    enabled: false,
+    weight: 1,
+    mode: "deviation",
+  }),
 });
 
 // ---------------------------------------------------------------------------

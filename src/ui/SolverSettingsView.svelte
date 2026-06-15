@@ -8,7 +8,10 @@
   // tunable weights — they always hold.
   const s = $derived($appData.solverSettings);
 
-  function patchTerm(key: "coverage" | "breaks" | "peakWindow", patch: { enabled?: boolean; weight?: number; windowHours?: number }) {
+  function patchTerm(
+    key: "coverage" | "breaks" | "peakWindow" | "fairness",
+    patch: { enabled?: boolean; weight?: number; windowHours?: number; mode?: "spread" | "deviation" },
+  ) {
     mutate((d) => Object.assign(d.solverSettings[key], patch));
   }
   function setTimeLimit(seconds: number) {
@@ -73,6 +76,25 @@
         {/if}
       </div>
       <p class="sub">Penalize, per hour, the heaviest rolling window of assigned work faced by any one person across the whole range — shrinking the single worst stretch anyone works. A shift counts toward a window if it starts within it; hand-assigned time counts too.</p>
+    </div>
+
+    <div class="term">
+      <div class="term-head">
+        <label class="tcheck">
+          <input type="checkbox" checked={s.fairness.enabled} onchange={(e) => patchTerm("fairness", { enabled: e.currentTarget.checked })} />
+          <span class="tname">Balance workload fairly</span>
+        </label>
+        {#if s.fairness.enabled}
+          <span class="cap">
+            <select value={s.fairness.mode} onchange={(e) => patchTerm("fairness", { mode: e.currentTarget.value as "spread" | "deviation" })}>
+              <option value="deviation">Balance everyone</option>
+              <option value="spread">Squeeze the extremes</option>
+            </select>
+          </span>
+          <input class="weight" type="number" step="0.1" value={s.fairness.weight} onchange={(e) => patchTerm("fairness", { weight: Number(e.currentTarget.value) })} />
+        {/if}
+      </div>
+      <p class="sub">Even out total workload <em>proportional to each person's weekly target</em>: measure everyone's hours — already worked (Person Hours seed + tracked ledger) plus newly assigned — as a fraction of their weekly target, and level those out. <em>Balance everyone</em> pulls the whole roster toward a shared level; <em>Squeeze the extremes</em> only narrows the gap between the busiest and idlest. People with no workload target set are left out.</p>
     </div>
   </section>
 </div>

@@ -27,6 +27,7 @@
 import { LpBuilder } from "./builder";
 import type { HighsLikeSolution, LpStats } from "./builder";
 import { isPersonAvailable } from "../model/ledger";
+import { computeDerivedHours, weeklyHours } from "../model/hours";
 import type { AppData, Shift } from "../model/types";
 
 /** A chosen (or candidate) placement of a person into one empty slot. */
@@ -272,6 +273,76 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
         }
       }
       penalties.push([peak, -perMinute]);
+    }
+  }
+
+  // Fairness: even out workload *proportional to each person's weekly target*.
+  // Each person's load ratio = (hours already worked + hours assigned now) /
+  // weekly-target rate — in units of "weeks", so a 20h/wk part-timer and a
+  // 40h/wk full-timer are even when each has done the same week-equivalents.
+  // Already-worked hours come from the seeded `personHours` plus hours derived
+  // from filled ledger slots (`computeDerivedHours`); newly-solved seats are
+  // still null there, so the assigned-now term doesn't double-count them.
+  //
+  //   ratio_p = e_p/rate_p + Σ (durHours_s / rate_p) · x[s,p]
+  //
+  // Only people with a positive weekly target carry a ratio; the rest can't be
+  // normalized and are left out. The term is built only with ≥2 such people
+  // (fairness is meaningless below that, and it keeps every aux var in ≥2
+  // constraints — clear of the column-singleton presolve trap, see builder.ts).
+  const fairness = data.solverSettings.fairness;
+  if (fairness.enabled && fairness.weight > 0) {
+    // Already-worked hours per person (seed + derived from filled slots).
+    const existingHours = new Map<string, number>();
+    const addExisting = (pid: string, h: number) =>
+      existingHours.set(pid, (existingHours.get(pid) ?? 0) + h);
+    for (const ph of data.personHours) addExisting(ph.personId, ph.hours);
+    for (const [pid, byType] of computeDerivedHours(data))
+      for (const [, h] of byType) addExisting(pid, h);
+
+    // Each person in the fairness set: their constant load c_p = e_p/rate_p and
+    // the assigned-now terms a_{p,s}·x = (durHours_s/rate_p)·x.
+    interface RatioPerson { c: number; terms: [string, number][]; max: number }
+    const people: RatioPerson[] = [];
+    for (const [personId, segs] of seatVarsByPerson) {
+      const p = data.persons.find((q) => q.id === personId);
+      const rate = p ? weeklyHours(p) : null;
+      if (rate === null || rate <= 0) continue;
+      const c = (existingHours.get(personId) ?? 0) / rate;
+      const terms: [string, number][] = [];
+      let assignable = 0;
+      for (const s of segs) {
+        const durHours = (s.end - s.start) / 3_600_000;
+        terms.push([s.v, durHours / rate]);
+        assignable += durHours / rate;
+      }
+      people.push({ c, terms, max: c + assignable });
+    }
+
+    if (people.length >= 2) {
+      const w = fairness.weight;
+      const ratioUb = Math.max(...people.map((p) => p.max));
+      if (fairness.mode === "deviation") {
+        // L1: pull every ratio toward a free shared reference R; penalize Σ dev_p.
+        //   dev_p ≥ ratio_p − R   and   dev_p ≥ R − ratio_p
+        const R = b.addContinuous(0, ratioUb);
+        for (const p of people) {
+          const dev = b.addContinuous(0, ratioUb);
+          b.addConstraint([...p.terms, [R, -1], [dev, -1]], "<=", -p.c, "fairness");
+          b.addConstraint([...p.terms.map((t): [string, number] => [t[0], -t[1]]), [R, 1], [dev, -1]], "<=", p.c, "fairness");
+          penalties.push([dev, -w]);
+        }
+      } else {
+        // Min-max: penalize (max ratio − min ratio); the solver drives M to the
+        // busiest ratio and m to the idlest, shrinking the gap between them.
+        const M = b.addContinuous(0, ratioUb);
+        const m = b.addContinuous(0, ratioUb);
+        for (const p of people) {
+          b.addConstraint([...p.terms, [M, -1]], "<=", -p.c, "fairness"); // M ≥ ratio_p
+          b.addConstraint([...p.terms.map((t): [string, number] => [t[0], -t[1]]), [m, 1]], "<=", p.c, "fairness"); // m ≤ ratio_p
+        }
+        penalties.push([M, -w], [m, w]);
+      }
     }
   }
 
