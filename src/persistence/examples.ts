@@ -160,6 +160,8 @@ function createArchelonData(): AppData {
     personAttributes,
     availability,
     shiftTemplates,
+    // Open the Ledger on the whole month of July 2027.
+    ledgerView: { from: "2027-07-01", to: "2027-07-31" },
   });
 }
 

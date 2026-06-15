@@ -14,12 +14,12 @@
     reconcileAvailability,
     isPersonAvailable,
   } from "../model/ledger";
+  import { setLedgerView } from "../model/mutations";
+  import { formatDateTime } from "../util/dates";
   import { assignPeople } from "../solver/generate";
   import { ledgerToCsv, ledgerToIcs, ledgerToPrintHtml } from "../persistence/export";
 
   // --- view range (date-only strings) --------------------------------------
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   function addDays(d: Date, n: number): Date {
     const r = new Date(d);
     r.setDate(r.getDate() + n);
@@ -30,10 +30,13 @@
     return new Date(y, m - 1, d);
   }
 
-  const today = new Date();
-  let rangeStart = $state(toDateStr(today));
-  let rangeEnd = $state(toDateStr(addDays(today, 13)));
-  let pxPerHour = $state(16);
+  // The timeline window lives in the persisted dataset (appData.ledgerView), so
+  // it survives refreshes and travels with imported/example workbooks.
+  const rangeStart = $derived($appData.ledgerView.from);
+  const rangeEnd = $derived($appData.ledgerView.to);
+  // zoom: 0 = fully zoomed out (min(14, days) fill the width), 100 = zoomed in (~1 day fills the width)
+  let zoom = $state(0);
+  let viewportW = $state(0); // measured width of the timeline scroll container
   let selectedId = $state<string | null>(null);
   let status = $state("");
   let busy = $state(false);
@@ -44,6 +47,10 @@
   const domainStart = $derived(parseDate(rangeStart));
   const domainEnd = $derived(addDays(parseDate(rangeEnd), 1)); // end day inclusive
   const totalDays = $derived(Math.max(1, Math.round((domainEnd.getTime() - domainStart.getTime()) / 86_400_000)));
+  // Map zoom → days that fill the viewport: 14 (or fewer) when out, 1 when fully in.
+  const maxVisibleDays = $derived(Math.min(14, totalDays));
+  const visibleDays = $derived(maxVisibleDays - (zoom / 100) * (maxVisibleDays - 1));
+  const pxPerHour = $derived(viewportW > 0 ? viewportW / (visibleDays * 24) : 16);
   const totalWidth = $derived(totalDays * 24 * pxPerHour);
 
   // Lay shifts onto lanes: greedy interval partitioning so overlaps stack.
@@ -70,7 +77,10 @@
       }
       const left = ((b.startMs - dStart) / HOUR_MS) * pxPerHour;
       const width = Math.max(46, (b.shift.durationMinutes / 60) * pxPerHour);
-      return { ...b, lane, left, width };
+      // Break trails the shift from its actual end; the line is partly obscured by the block.
+      const breakLeft = ((b.endMs - dStart) / HOUR_MS) * pxPerHour;
+      const breakWidth = (b.shift.breakMinutes / 60) * pxPerHour;
+      return { ...b, lane, left, width, breakLeft, breakWidth };
     });
   });
   const laneCount = $derived(Math.max(1, ...layout.map((b) => b.lane + 1)));
@@ -114,7 +124,7 @@
     return attributeIds.every((a) => have.has(a));
   }
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  const fmtTime = (iso: string) => formatDateTime(iso, { weekday: true });
   const toInput = (iso: string) => iso.slice(0, 16);
   const fromInput = (v: string) => (v.length === 16 ? `${v}:00` : v);
 
@@ -196,13 +206,13 @@
   </p>
 
   <div class="row" style="gap: 16px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap;">
-    <DateRangePicker bind:start={rangeStart} bind:end={rangeEnd} />
+    <DateRangePicker start={rangeStart} end={rangeEnd} onChange={setLedgerView} />
     <button class="btn" onclick={doPrefill}>Prefill timeframe</button>
     <button class="btn" onclick={doAssign} disabled={busy}>{busy ? "Assigning…" : "Assign people"}</button>
     <button class="btn ghost" onclick={doClear}>Clear assignments</button>
     <div class="field">
       <span class="cap">Zoom</span>
-      <input type="range" min="6" max="60" bind:value={pxPerHour} />
+      <input type="range" min="0" max="100" bind:value={zoom} />
     </div>
     <div class="export-group">
       <span class="cap">Export</span>
@@ -226,16 +236,25 @@
   {/if}
 
   <!-- Timeline -->
-  <div class="timeline-scroll">
+  <div class="timeline-scroll" bind:clientWidth={viewportW}>
     <div class="timeline" style="width: {totalWidth}px;">
       <div class="axis" style="width: {totalWidth}px;">
         {#each Array(totalDays) as _, i}
           <div class="day-col" style="left: {i * 24 * pxPerHour}px; width: {24 * pxPerHour}px;">
-            <span class="day-label">{addDays(domainStart, i).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</span>
+            <span class="day-label">{addDays(domainStart, i).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })}</span>
           </div>
         {/each}
       </div>
       <div class="lanes" style="height: {laneCount * LANE_H}px; width: {totalWidth}px;">
+        {#each layout as b (b.shift.id)}
+          {#if b.breakWidth > 0}
+            <div
+              class="break-line"
+              style="left: {b.breakLeft}px; width: {b.breakWidth}px; top: {b.lane * LANE_H + LANE_H / 2}px;"
+              title="Break: {b.shift.breakMinutes} min"
+            ></div>
+          {/if}
+        {/each}
         {#each layout as b (b.shift.id)}
           {@const f = fill(b.shift)}
           <button
@@ -360,11 +379,15 @@
   .day-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); box-sizing: border-box; }
   .day-label { font-size: 12px; color: var(--text); padding: 4px 6px; display: inline-block; white-space: nowrap; }
   .lanes { position: relative; }
+  .break-line {
+    position: absolute; height: 0; transform: translateY(-50%);
+    border-top: 2px dashed var(--text); opacity: 0.4; pointer-events: none;
+  }
   .block {
     position: absolute; height: 44px; box-sizing: border-box; margin: 3px 0; padding: 4px 6px;
     border: 1px solid var(--accent-border); background: var(--accent-bg); border-radius: 5px;
     cursor: pointer; overflow: hidden; text-align: left; display: flex; flex-direction: column;
-    justify-content: space-between; font: inherit;
+    justify-content: space-between; font: inherit; line-height: 1.2;
   }
   .block:hover { box-shadow: var(--shadow); }
   .block.selected { outline: 2px solid var(--accent); }

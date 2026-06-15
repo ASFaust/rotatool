@@ -142,6 +142,15 @@ export function removeShiftTemplate(id: string): void {
   });
 }
 
+// --- Ledger view -----------------------------------------------------------
+
+/** Persist the Ledger timeline window (date-only `from`/`to`, `to` inclusive). */
+export function setLedgerView(from: string, to: string): void {
+  mutate((d) => {
+    d.ledgerView = { from, to };
+  });
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }

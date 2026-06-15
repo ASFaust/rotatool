@@ -13,9 +13,9 @@
  *
  * Hard constraints: attribute eligibility (a person must hold *all* of a
  * requirement's attributes) and availability gate which (seat, person) pairs
- * even get a variable; proximity (overlap / configurable gap) mutually excludes
- * a person's conflicting seats — which also stops one person taking two seats of
- * the same shift, since those overlap.
+ * even get a variable; overlap mutually excludes a person's colliding seats —
+ * which also stops one person taking two seats of the same shift. Required rest
+ * between shifts is handled softly by the `breaks` term, not here.
  *
  * Objective (maximize): coverage rewards each filled seat, scaled by the shift's
  * `importance`; `required` seats carry a dominant reward so they fill first but
@@ -51,12 +51,9 @@ export interface ModelContext {
   xVars: Map<string, SeatAssignment>;
 }
 
-/** Two spans conflict if they overlap or fall within `gapMs` of each other. */
-function inProximity(aStart: number, aEnd: number, bStart: number, bEnd: number, gapMs: number): boolean {
-  const latestStart = Math.max(aStart, bStart);
-  const earliestEnd = Math.min(aEnd, bEnd);
-  if (latestStart < earliestEnd) return true; // overlap
-  return latestStart - earliestEnd < gapMs; // gap below threshold
+/** Two spans collide if they overlap in time. */
+function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
 }
 
 interface Seat {
@@ -116,7 +113,6 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
     });
   }
 
-  const gapMs = data.solverSettings.proximityGapMinutes * 60_000;
   const coverageWeight = data.solverSettings.coverage.enabled ? data.solverSettings.coverage.weight : 0;
   // Per filled required seat. Dominant over ordinary coverage so required seats
   // fill first, but soft so an unfillable one just degrades the roster.
@@ -133,7 +129,7 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
       if (!seat.attributeIds.every((a) => attrs.has(a))) continue;
       if (!isPersonAvailable(data, personId, new Date(seat.start))) continue;
       const busy = busyByPerson.get(personId);
-      if (busy?.some((iv) => inProximity(seat.start, seat.end, iv.start, iv.end, gapMs))) continue;
+      if (busy?.some((iv) => overlaps(seat.start, seat.end, iv.start, iv.end))) continue;
 
       const x = b.addBinary();
       xVars.set(x, { shiftId: seat.shiftId, reqIndex: seat.reqIndex, slotIndex: seat.slotIndex, personId });
@@ -151,17 +147,16 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
     if (seatVars.length > 0) b.addConstraint(seatVars, "<=", 1, "seat");
   }
 
-  // Proximity: per person, one Σx ≤ 1 per maximal clique of conflicting seats.
-  // Inflating each seat by gap/2 turns "conflict" into plain overlap, so a
+  // Overlap: per person, one Σx ≤ 1 per maximal clique of overlapping seats. A
   // left-to-right sweep emits at most one clique per seat (and clique
-  // constraints dominate the pairwise ones). With gap 0 this still forbids
-  // genuine overlaps — including two seats of the same shift.
+  // constraints dominate the pairwise ones). This forbids any time overlap,
+  // including two seats of the same shift.
   for (const [, segs] of seatVarsByPerson) {
     const ivs = segs
-      .map((s) => ({ v: s.v, s: s.start - gapMs / 2, e: s.end + gapMs / 2 }))
+      .map((s) => ({ v: s.v, s: s.start, e: s.end }))
       .sort((a, c) => a.s - c.s || a.e - c.e);
     const emit = (clique: typeof ivs) => {
-      if (clique.length >= 2) b.addConstraint(clique.map((iv): [string, number] => [iv.v, 1]), "<=", 1, "proximity");
+      if (clique.length >= 2) b.addConstraint(clique.map((iv): [string, number] => [iv.v, 1]), "<=", 1, "overlap");
     };
     let active: typeof ivs = [];
     let grown = false;
@@ -180,8 +175,8 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
   // Breaks: a shift's breakMinutes declares rest after it. Another of the same
   // person's seats starting inside that rest costs the violated minutes — soft,
   // so the solver pays a price instead of going infeasible. Seats hard-excluded
-  // already (overlap / gap / same shift) are skipped. One aux var per break
-  // carries the worst violating cut, keeping the var count at one per break.
+  // already (overlap / same shift) are skipped. One aux var per break carries
+  // the worst violating cut, keeping the var count at one per break.
   const breaks = data.solverSettings.breaks;
   if (breaks.enabled && breaks.weight > 0) {
     const perMinute = breaks.weight / 60; // weight is per violated hour
@@ -194,7 +189,7 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
         for (const c of cands) {
           if (c.start >= restEnd) break; // sorted by start
           if (c === a || c.shiftId === a.shiftId) continue;
-          if (c.start - a.end < gapMs) continue; // overlap/gap ⇒ hard-excluded
+          if (c.start < a.end) continue; // overlap ⇒ hard-excluded
           followers.push({ v: c.v, min: (restEnd - c.start) / 60_000 });
         }
         if (followers.length === 0) continue;

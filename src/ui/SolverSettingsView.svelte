@@ -4,15 +4,12 @@
 
   // The objective is a weighted sum: coverage rewards each filled slot (scaled by
   // the shift's importance), breaks subtracts a soft penalty for cutting rest
-  // short. Hard constraints (eligibility, availability, proximity) are not tunable
-  // weights — they always hold.
+  // short. Hard constraints (eligibility, availability, no time overlap) are not
+  // tunable weights — they always hold.
   const s = $derived($appData.solverSettings);
 
   function patchTerm(key: "coverage" | "breaks", patch: { enabled?: boolean; weight?: number }) {
     mutate((d) => Object.assign(d.solverSettings[key], patch));
-  }
-  function setProximityGap(minutes: number) {
-    mutate((d) => (d.solverSettings.proximityGapMinutes = Math.max(0, minutes)));
   }
   function setTimeLimit(seconds: number) {
     mutate((d) => (d.solverSettings.solveTimeLimitSeconds = Math.max(1, seconds)));
@@ -41,18 +38,6 @@
       </span>
     </label>
     <p class="sub">Assignment stops here and keeps the best roster found so far.</p>
-  </section>
-
-  <section class="block">
-    <h3>Hard constraints</h3>
-    <label class="row">
-      <span class="rlabel">Minimum gap between a person's shifts</span>
-      <span class="rfield">
-        <input type="number" min="0" step="15" value={s.proximityGapMinutes} onchange={(e) => setProximityGap(Number(e.currentTarget.value))} />
-        <span class="unit">minutes</span>
-      </span>
-    </label>
-    <p class="sub">No one is assigned two shifts that overlap or fall within this gap. 0 still forbids overlaps.</p>
   </section>
 
   <section class="block">

@@ -159,9 +159,8 @@ code {
 #app {
   width: 1126px;
   max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  margin: 0;
+  text-align: left;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -302,6 +301,13 @@ code {
 
 .view {
   text-align: left;
+}
+/* Break a view out of the left-aligned #app column to use the full viewport
+   width. The view keeps its natural left edge (the .content 24px inset) and
+   extends right to a matching 24px inset from the viewport edge. */
+.view.wide {
+  width: calc(100vw - 48px);
+  max-width: calc(100vw - 48px);
 }
 .view h2 {
   font-size: 22px;

@@ -176,13 +176,31 @@ const Term = z.object({ enabled: z.boolean(), weight: z.number() });
 export const SolverSettingsSchema = z.object({
   /** Stop the solve after this many seconds and keep the best roster found. */
   solveTimeLimitSeconds: z.number().positive().default(30),
-  /** Hard constraint: minimum gap between any two shifts for one person. */
-  proximityGapMinutes: z.number().nonnegative().default(0),
   /** Fill slots, weighted by each shift's `importance`. */
   coverage: Term.default({ enabled: true, weight: 1 }),
   /** Penalize a person's next shift eating into a declared break. */
   breaks: Term.default({ enabled: true, weight: 1 }),
 });
+
+// ---------------------------------------------------------------------------
+// Ledger view (persisted timeline range — the "from"/"to" of the Ledger tab)
+// ---------------------------------------------------------------------------
+
+/** The date-only window the Ledger timeline shows. `to` is inclusive. */
+export const LedgerViewSchema = z.object({
+  from: isoDate,
+  to: isoDate,
+});
+
+/** Default window: today through two weeks out (matches the empty-workbook view). */
+function defaultLedgerView(): { from: string; to: string } {
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const today = new Date();
+  const end = new Date(today);
+  end.setDate(end.getDate() + 13);
+  return { from: fmt(today), to: fmt(end) };
+}
 
 // ---------------------------------------------------------------------------
 // Workbook metadata + the aggregate root
@@ -204,6 +222,8 @@ export const AppDataSchema = z.object({
   shiftTemplates: z.array(ShiftTemplateSchema).default([]),
   solverSettings: SolverSettingsSchema.prefault({}),
   shifts: z.array(ShiftSchema).default([]),
+  /** Persisted Ledger timeline window. */
+  ledgerView: LedgerViewSchema.default(defaultLedgerView),
 });
 
 /** A fresh, empty dataset stamped with the current schema version. */

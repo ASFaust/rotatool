@@ -16,6 +16,7 @@ import type {
   ShiftSchema,
   ShiftRequirementSchema,
   SolverSettingsSchema,
+  LedgerViewSchema,
   MetaSchema,
   AppDataSchema,
 } from "./schema";
@@ -31,5 +32,6 @@ export type TemplateRequirement = z.infer<typeof TemplateRequirementSchema>;
 export type Shift = z.infer<typeof ShiftSchema>;
 export type ShiftRequirement = z.infer<typeof ShiftRequirementSchema>;
 export type SolverSettings = z.infer<typeof SolverSettingsSchema>;
+export type LedgerView = z.infer<typeof LedgerViewSchema>;
 export type Meta = z.infer<typeof MetaSchema>;
 export type AppData = z.infer<typeof AppDataSchema>;

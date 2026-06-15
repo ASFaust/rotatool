@@ -12,6 +12,7 @@
  */
 
 import type { AppData, Shift } from "../model/types";
+import { formatDateTime } from "../util/dates";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -124,10 +125,7 @@ function htmlEscape(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-const fmtWhen = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
-    weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-  });
+const fmtWhen = (iso: string) => formatDateTime(iso, { weekday: true });
 
 /** A standalone HTML document of the rota, for printing from a popup window. */
 export function ledgerToPrintHtml(data: AppData): string {
