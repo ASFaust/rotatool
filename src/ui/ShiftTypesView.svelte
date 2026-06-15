@@ -27,10 +27,15 @@
 
   function del(id: string, name: string) {
     const used = usageOf(id);
-    if (used > 0) {
+    const seeded = $appData.personHours.filter((h) => h.typeId === id).length;
+    if (used > 0 || seeded > 0) {
+      const parts: string[] = [];
+      if (used > 0) parts.push(`${used} shift(s)/template(s)`);
+      if (seeded > 0) parts.push(`${seeded} seeded person-hour row(s)`);
       const ok = confirm(
-        `Shift type "${name}" is in use by ${used} shift(s)/template(s). ` +
-          `They will be moved to the default type. Continue?`,
+        `Shift type "${name}" is in use by ${parts.join(" and ")}. ` +
+          `Its shifts move to the default type and its seeded hours are added to ` +
+          `each person's default-type hours. Continue?`,
       );
       if (!ok) return;
     }

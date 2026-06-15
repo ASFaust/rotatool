@@ -66,9 +66,22 @@ function v3ToV4(raw: Obj): Obj {
   };
 }
 
+/**
+ * v4 → v5: add the `personHours` seed array (manual hours per person per type).
+ * Purely additive — old datasets simply start with no seeded hours.
+ */
+function v4ToV5(raw: Obj): Obj {
+  return {
+    ...raw,
+    personHours: Array.isArray(raw.personHours) ? raw.personHours : [],
+    meta: { ...(isObj(raw.meta) ? raw.meta : {}), schemaVersion: 5 },
+  };
+}
+
 /** Ordered migration steps; index by the *source* version they upgrade from. */
 const STEPS: Record<number, (raw: Obj) => Obj> = {
   3: v3ToV4,
+  4: v4ToV5,
 };
 
 /**

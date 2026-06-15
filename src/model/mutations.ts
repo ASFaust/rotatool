@@ -42,6 +42,7 @@ export function removePerson(id: string): void {
     d.persons = d.persons.filter((p) => p.id !== id);
     d.personAttributes = d.personAttributes.filter((pa) => pa.personId !== id);
     d.availability = d.availability.filter((a) => a.personId !== id);
+    d.personHours = d.personHours.filter((h) => h.personId !== id);
     for (const s of d.shifts)
       for (const r of s.requirements)
         r.slots = r.slots.map((slot) => (slot === id ? null : slot));
@@ -105,6 +106,24 @@ export function removePersonAttribute(personId: string, attributeId: string): vo
   });
 }
 
+// --- Person hours (manual mid-season seed) ---------------------------------
+
+/**
+ * Upsert the manually-entered hours for a (person, type). Storage is sparse:
+ * a zero/blank/negative value clears the row instead of storing it.
+ */
+export function setPersonHours(personId: string, typeId: string, hours: number): void {
+  mutate((d) => {
+    const i = d.personHours.findIndex((h) => h.personId === personId && h.typeId === typeId);
+    if (!(hours > 0)) {
+      if (i >= 0) d.personHours.splice(i, 1);
+      return;
+    }
+    if (i >= 0) d.personHours[i].hours = hours;
+    else d.personHours.push({ personId, typeId, hours });
+  });
+}
+
 // --- Shift types -----------------------------------------------------------
 
 export function addShiftType(name: string): string {
@@ -123,9 +142,10 @@ export function updateShiftType(id: string, patch: Partial<ShiftType>): void {
 }
 
 /**
- * Delete a shift type and reassign every shift/template that used it back to the
- * default type. The default type itself cannot be deleted. (Manual person-hours
- * keyed to the type are merged into the default elsewhere — Person Hours tab.)
+ * Delete a shift type. The default type itself cannot be deleted. Shifts and
+ * templates of the deleted type fall back to the default — so their *derived*
+ * hours roll into the default automatically — and any manually-entered
+ * person-hours for the type are merged into each person's default-type row.
  */
 export function removeShiftType(id: string): void {
   if (id === DEFAULT_SHIFT_TYPE_ID) return;
@@ -133,6 +153,16 @@ export function removeShiftType(id: string): void {
     d.shiftTypes = d.shiftTypes.filter((t) => t.id !== id);
     for (const t of d.shiftTemplates) if (t.typeId === id) t.typeId = DEFAULT_SHIFT_TYPE_ID;
     for (const s of d.shifts) if (s.typeId === id) s.typeId = DEFAULT_SHIFT_TYPE_ID;
+    // Merge manual hours of the deleted type into each person's default-type row.
+    const moved = d.personHours.filter((h) => h.typeId === id);
+    d.personHours = d.personHours.filter((h) => h.typeId !== id);
+    for (const m of moved) {
+      const existing = d.personHours.find(
+        (h) => h.personId === m.personId && h.typeId === DEFAULT_SHIFT_TYPE_ID,
+      );
+      if (existing) existing.hours += m.hours;
+      else d.personHours.push({ personId: m.personId, typeId: DEFAULT_SHIFT_TYPE_ID, hours: m.hours });
+    }
   });
 }
 

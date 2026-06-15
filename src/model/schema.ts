@@ -24,7 +24,7 @@
 import { z } from "zod";
 
 /** Bumped whenever the persisted shape changes. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** Non-empty identifier string (internal id or a name reference). */
 const id = z.string().min(1);
@@ -189,6 +189,22 @@ export const ShiftSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Person hours (mid-season seed: hours each person already worked, per type)
+// ---------------------------------------------------------------------------
+
+/**
+ * Manually-entered hours a person had already worked in a shift type *before*
+ * the rota was tracked here — the "shift memory" for orgs adopting mid-season.
+ * Sparse: only entered (non-zero) rows are stored. The Person Hours tab adds
+ * this to hours *derived* from the tracked ledger to get each person's total.
+ */
+export const PersonHoursSchema = z.object({
+  personId: id,
+  typeId: id,
+  hours: z.number().nonnegative(),
+});
+
+// ---------------------------------------------------------------------------
 // Solver settings (minimal: coverage + breaks)
 // ---------------------------------------------------------------------------
 
@@ -245,6 +261,8 @@ export const AppDataSchema = z.object({
   shiftTemplates: z.array(ShiftTemplateSchema).default([]),
   solverSettings: SolverSettingsSchema.prefault({}),
   shifts: z.array(ShiftSchema).default([]),
+  /** Manually-seeded hours per person per type (mid-season "shift memory"). */
+  personHours: z.array(PersonHoursSchema).default([]),
   /** Persisted Ledger timeline window. */
   ledgerView: LedgerViewSchema.default(defaultLedgerView),
 });

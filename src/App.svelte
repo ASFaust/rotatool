@@ -12,8 +12,9 @@
   import ShiftsView from "./ui/ShiftsView.svelte";
   import SolverSettingsView from "./ui/SolverSettingsView.svelte";
   import LedgerView from "./ui/LedgerView.svelte";
+  import PersonHoursView from "./ui/PersonHoursView.svelte";
 
-  type Tab = "overview" | "people" | "attributes" | "shiftTypes" | "shifts" | "solver" | "ledger";
+  type Tab = "overview" | "people" | "attributes" | "shiftTypes" | "shifts" | "solver" | "ledger" | "personHours";
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "people", label: "People" },
@@ -22,6 +23,7 @@
     { id: "shifts", label: "Shifts" },
     { id: "solver", label: "Solver" },
     { id: "ledger", label: "Ledger" },
+    { id: "personHours", label: "Person Hours" },
   ];
   let tab = $state<Tab>("overview");
 
@@ -38,6 +40,7 @@
     ["Shift types", $appData.shiftTypes.length],
     ["Shift templates", $appData.shiftTemplates.length],
     ["Shifts (concrete)", $appData.shifts.length],
+    ["Person-hours (seeded)", $appData.personHours.length],
   ] as const);
 
   function loadExample(example: ExampleTemplate) {
@@ -172,6 +175,8 @@
     <SolverSettingsView />
   {:else if tab === "ledger"}
     <LedgerView />
+  {:else if tab === "personHours"}
+    <PersonHoursView />
   {/if}
 </main>
 

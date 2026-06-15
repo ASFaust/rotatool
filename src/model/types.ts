@@ -16,6 +16,7 @@ import type {
   TemplateRequirementSchema,
   ShiftSchema,
   ShiftRequirementSchema,
+  PersonHoursSchema,
   SolverSettingsSchema,
   LedgerViewSchema,
   MetaSchema,
@@ -33,6 +34,7 @@ export type ShiftTemplate = z.infer<typeof ShiftTemplateSchema>;
 export type TemplateRequirement = z.infer<typeof TemplateRequirementSchema>;
 export type Shift = z.infer<typeof ShiftSchema>;
 export type ShiftRequirement = z.infer<typeof ShiftRequirementSchema>;
+export type PersonHours = z.infer<typeof PersonHoursSchema>;
 export type SolverSettings = z.infer<typeof SolverSettingsSchema>;
 export type LedgerView = z.infer<typeof LedgerViewSchema>;
 export type Meta = z.infer<typeof MetaSchema>;
