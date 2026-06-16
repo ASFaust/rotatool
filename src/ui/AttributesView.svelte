@@ -21,9 +21,7 @@
   <h2>Attributes</h2>
   <p class="hint">
     Named properties a person can have and a shift can require — skills, roles, and flags
-    like <em>leader</em> or <em>part-time</em> are all attributes. Mark an attribute
-    <em>valued</em> if it carries a value (e.g. <code>team = Blue</code>) rather than being a
-    simple yes/no tag.
+    like <em>leader</em> or <em>part-time</em> are all attributes. Each is a simple yes/no tag.
   </p>
 
   <div class="row" style="margin-bottom: 16px;">
@@ -42,7 +40,6 @@
       <thead>
         <tr>
           <th style="width: 60%;">Name</th>
-          <th>Valued</th>
           <th></th>
         </tr>
       </thead>
@@ -58,13 +55,6 @@
               {#if nameTaken(attr.name, attr.id)}
                 <span class="muted" style="color:#c0392b; font-size:12px;">duplicate name</span>
               {/if}
-            </td>
-            <td>
-              <input
-                type="checkbox"
-                checked={attr.valued}
-                onchange={(e) => updateAttribute(attr.id, { valued: e.currentTarget.checked })}
-              />
             </td>
             <td style="text-align:right;">
               <button

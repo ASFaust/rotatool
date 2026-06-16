@@ -29,7 +29,7 @@
   function personTags(personId: string) {
     return $appData.personAttributes
       .filter((pa) => pa.personId === personId)
-      .map((pa) => ({ pa, attr: $appData.attributes.find((a) => a.id === pa.attributeId) }))
+      .map((pa) => ({ attr: $appData.attributes.find((a) => a.id === pa.attributeId) }))
       .filter((x) => x.attr !== undefined);
   }
 
@@ -133,17 +133,9 @@
       <div class="field" style="margin-bottom: 12px;">
         <span class="cap">Attributes</span>
         <div class="tags">
-          {#each personTags(person.id) as { pa, attr } (attr!.id)}
+          {#each personTags(person.id) as { attr } (attr!.id)}
             <span class="tag">
               {attr!.name}
-              {#if attr!.valued}
-                <input
-                  style="width: 70px; padding: 1px 4px;"
-                  placeholder="value"
-                  value={pa.value ?? ""}
-                  onchange={(e) => setPersonAttribute(person.id, attr!.id, e.currentTarget.value.trim() || undefined)}
-                />
-              {/if}
               <button title="Remove" onclick={() => removePersonAttribute(person.id, attr!.id)}>×</button>
             </span>
           {/each}

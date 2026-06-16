@@ -53,6 +53,69 @@ export function weeklyHours(person: AppData["persons"][number]): number | null {
   }
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+interface Iv { s: number; e: number }
+
+/** Merge overlapping/touching intervals into a disjoint, sorted set. */
+function mergeIvs(ivs: Iv[]): Iv[] {
+  const sorted = ivs.filter((i) => i.e > i.s).sort((a, b) => a.s - b.s);
+  const out: Iv[] = [];
+  for (const iv of sorted) {
+    const last = out[out.length - 1];
+    if (last && iv.s <= last.e) last.e = Math.max(last.e, iv.e);
+    else out.push({ ...iv });
+  }
+  return out;
+}
+
+/** union(base) minus union(subs), as a disjoint interval set. */
+function subtractIvs(base: Iv[], subs: Iv[]): Iv[] {
+  let result = mergeIvs(base);
+  for (const cut of mergeIvs(subs)) {
+    const next: Iv[] = [];
+    for (const iv of result) {
+      if (cut.e <= iv.s || cut.s >= iv.e) { next.push(iv); continue; } // disjoint
+      if (cut.s > iv.s) next.push({ s: iv.s, e: cut.s });
+      if (cut.e < iv.e) next.push({ s: cut.e, e: iv.e });
+    }
+    result = next;
+  }
+  return result;
+}
+
+/**
+ * Effective-availability duration, in weeks, that `personId` has within
+ * [from, to) — i.e. union(available) minus union(unavailable), clamped to the
+ * window. Matches `isPersonAvailable`'s day-granular, inclusive-end semantics
+ * (a person with no `available` interval is always available). Used by the
+ * solver's fairness term to pro-rate work over the time a person was actually
+ * present, so leave periods don't accrue "expected" hours.
+ */
+export function availableWeeks(data: AppData, personId: string, from: Date, to: Date): number {
+  const avail: Iv[] = [];
+  const unavail: Iv[] = [];
+  let hasAvail = false;
+  for (const a of data.availability) {
+    if (a.personId !== personId) continue;
+    const s = new Date(a.start).getTime();
+    // Inclusive end day: an interval ending on day D covers through end of D.
+    const e = a.end ? new Date(a.end).getTime() + MS_PER_DAY : Infinity;
+    if (a.kind === "available") { hasAvail = true; avail.push({ s, e }); }
+    else unavail.push({ s, e });
+  }
+  const base: Iv[] = hasAvail ? avail : [{ s: -Infinity, e: Infinity }];
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  let total = 0;
+  for (const iv of subtractIvs(base, unavail)) {
+    const s = Math.max(iv.s, fromMs);
+    const e = Math.min(iv.e, toMs);
+    if (e > s) total += e - s;
+  }
+  return total / MS_PER_WEEK;
+}
+
 /**
  * Pro-rata seed hours for the Person Hours autofill tool. For each active
  * person, hours they "should" have worked from their start through `endDate` at
@@ -65,6 +128,12 @@ export function weeklyHours(person: AppData["persons"][number]): number | null {
  * People lacking an availability start or a workload target are skipped. Types
  * whose weight is ≤ 0 get nothing. Returns the full replacement `personHours`
  * (only non-zero rows, matching the sparse storage convention).
+ *
+ * NOTE: this reads `weeklyHours` as an *absolute* hours commitment. The solver's
+ * fairness term, by contrast, treats it as a *relative* weight (only ratios
+ * between people matter). So a seed produced here is on a real-hours scale and is
+ * only approximately commensurate with hours derived from tracked shifts when the
+ * entered targets aren't literal hours — acceptable for the mid-season seed.
  */
 export function computePrefillSeed(
   data: AppData,

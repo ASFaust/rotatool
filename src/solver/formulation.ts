@@ -27,7 +27,7 @@
 import { LpBuilder } from "./builder";
 import type { HighsLikeSolution, LpStats } from "./builder";
 import { isPersonAvailable } from "../model/ledger";
-import { computeDerivedHours, weeklyHours } from "../model/hours";
+import { computeDerivedHours, weeklyHours, personStartDate, availableWeeks } from "../model/hours";
 import type { AppData, Shift } from "../model/types";
 
 /** A chosen (or candidate) placement of a person into one empty slot. */
@@ -84,8 +84,17 @@ interface SeatVar {
   shiftId: string;
 }
 
-/** Build the LP that fills empty slots across the given concrete shifts. */
-export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelContext {
+/**
+ * Build the LP that fills empty slots across the given concrete shifts.
+ * `rangeStart`/`rangeEnd` bound the solve window; the fairness term needs them to
+ * pro-rate each person's load over the time they've been present (tenure).
+ */
+export function buildAssignmentModel(
+  data: AppData,
+  shifts: Shift[],
+  rangeStart: Date,
+  rangeEnd: Date,
+): ModelContext {
   const b = new LpBuilder();
 
   // Activated person -> their attribute ids (for eligibility matching).
@@ -276,50 +285,123 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
     }
   }
 
-  // Fairness: even out workload *proportional to each person's weekly target*.
-  // Each person's load ratio = (hours already worked + hours assigned now) /
-  // weekly-target rate — in units of "weeks", so a 20h/wk part-timer and a
-  // 40h/wk full-timer are even when each has done the same week-equivalents.
-  // Already-worked hours come from the seeded `personHours` plus hours derived
-  // from filled ledger slots (`computeDerivedHours`); newly-solved seats are
-  // still null there, so the assigned-now term doesn't double-count them.
+  // Fairness: even out each person's *contribution rate over their tenure*. The
+  // fair quantity is hours done per unit of time present, scaled by a relative
+  // participation weight — so someone who has been around twice as long is
+  // expected to have done about twice the work, and a half-weight part-timer
+  // about half. Each person's ratio is:
   //
-  //   ratio_p = e_p/rate_p + Σ (durHours_s / rate_p) · x[s,p]
+  //   ratio_p = (e_p + Σ durHours_s · x[s,p]) / (weight_p · present_p)
   //
-  // Only people with a positive weekly target carry a ratio; the rest can't be
-  // normalized and are left out. The term is built only with ≥2 such people
-  // (fairness is meaningless below that, and it keeps every aux var in ≥2
-  // constraints — clear of the column-singleton presolve trap, see builder.ts).
+  // where e_p = hours already worked (seeded `personHours` + hours derived from
+  // filled ledger slots; newly-solved seats are still null there, so assigned-now
+  // isn't double-counted), present_p = the weeks the person was effectively
+  // available from their start through the window end (availability-aware, so
+  // leave doesn't accrue expected time) divided by a reference tenure so the
+  // term's scale (and the meaning of `fairness.weight`) stays stable, and
+  // weight_p = their workload target read as a *relative* weight. This is
+  // scale-invariant in weight: only the ratios between people matter, never the
+  // absolute hours entered. People who left their target blank take a full share
+  // (the largest entered target, so blank = full-timer); if nobody set one,
+  // everyone is equal-weighted.
+  //
+  // (Businesses that want absolute contracted-hours targets instead of this
+  // relative/tenure rule would add a new fairness mode here — same field, a
+  // different objective — but that's intentionally not built yet.)
+  //
+  // Only people with a positive denominator carry a ratio (a person with no
+  // available time in the span can't be assigned anyway). The term is built only
+  // with ≥2 such people (fairness is meaningless below that, and it keeps every
+  // aux var in ≥2 constraints — clear of the column-singleton presolve trap, see
+  // builder.ts).
   const fairness = data.solverSettings.fairness;
   if (fairness.enabled && fairness.weight > 0) {
-    // Already-worked hours per person (seed + derived from filled slots).
-    const existingHours = new Map<string, number>();
-    const addExisting = (pid: string, h: number) =>
-      existingHours.set(pid, (existingHours.get(pid) ?? 0) + h);
-    for (const ph of data.personHours) addExisting(ph.personId, ph.hours);
+    // Already-worked hours per person (seed + derived from filled slots), kept
+    // both as a grand total and split per shift type for `perShiftType` mode.
+    const existingTotal = new Map<string, number>();
+    const existingByType = new Map<string, Map<string, number>>(); // typeId -> personId -> hours
+    const bump = (map: Map<string, number>, pid: string, h: number) => map.set(pid, (map.get(pid) ?? 0) + h);
+    const typeBucket = (typeId: string) =>
+      existingByType.get(typeId) ?? existingByType.set(typeId, new Map()).get(typeId)!;
+    for (const ph of data.personHours) {
+      bump(existingTotal, ph.personId, ph.hours);
+      bump(typeBucket(ph.typeId), ph.personId, ph.hours);
+    }
     for (const [pid, byType] of computeDerivedHours(data))
-      for (const [, h] of byType) addExisting(pid, h);
-
-    // Each person in the fairness set: their constant load c_p = e_p/rate_p and
-    // the assigned-now terms a_{p,s}·x = (durHours_s/rate_p)·x.
-    interface RatioPerson { c: number; terms: [string, number][]; max: number }
-    const people: RatioPerson[] = [];
-    for (const [personId, segs] of seatVarsByPerson) {
-      const p = data.persons.find((q) => q.id === personId);
-      const rate = p ? weeklyHours(p) : null;
-      if (rate === null || rate <= 0) continue;
-      const c = (existingHours.get(personId) ?? 0) / rate;
-      const terms: [string, number][] = [];
-      let assignable = 0;
-      for (const s of segs) {
-        const durHours = (s.end - s.start) / 3_600_000;
-        terms.push([s.v, durHours / rate]);
-        assignable += durHours / rate;
+      for (const [typeId, h] of byType) {
+        bump(existingTotal, pid, h);
+        bump(typeBucket(typeId), pid, h);
       }
-      people.push({ c, terms, max: c + assignable });
+
+    // shiftId -> typeId, to group candidate seats by shift type.
+    const typeByShift = new Map<string, string>();
+    for (const s of shifts) typeByShift.set(s.id, s.typeId);
+
+    // Per-person fairness denominator = relative weight · normalized tenure. The
+    // weight is the entered weekly target read as a pure ratio; a blank target
+    // takes a full share (the largest entered target, so blank = full-timer), and
+    // if nobody set one everyone is weighted 1. Tenure is availability-aware weeks
+    // from the person's start (or the window start, if they have no availability
+    // on record) through the window end. Only people with some time present carry
+    // a ratio.
+    let maxRate = 0;
+    for (const p of data.persons) {
+      const r = weeklyHours(p);
+      if (r && r > maxRate) maxRate = r;
+    }
+    const defaultWeight = maxRate > 0 ? maxRate : 1;
+
+    // First pass: each candidate's relative weight and weeks present.
+    const wp = new Map<string, { weight: number; present: number }>();
+    for (const [personId] of seatVarsByPerson) {
+      const p = data.persons.find((q) => q.id === personId);
+      if (!p) continue;
+      const r = weeklyHours(p);
+      const weight = r && r > 0 ? r : defaultWeight;
+      const start = personStartDate(data, personId) ?? rangeStart;
+      const present = availableWeeks(data, personId, start, rangeEnd);
+      if (weight > 0 && present > 0) wp.set(personId, { weight, present });
     }
 
-    if (people.length >= 2) {
+    // Reference tenure = the median weeks-present. Dividing every person's tenure
+    // by it keeps the term's magnitude — and so the meaning of `fairness.weight` —
+    // independent of how long people have been around or how wide the date range
+    // is. Without it, ratios shrink ~1/tenure and the weight silently loses bite.
+    // It's one global divisor, so all ratios scale together: relative fairness is
+    // unchanged, only the overall scale is fixed. For the median person tenure
+    // normalizes to 1, so denom = weight and the term matches the pre-tenure scale.
+    const presents = [...wp.values()].map((x) => x.present).sort((a, b) => a - b);
+    const refWeeks = presents.length ? presents[Math.floor((presents.length - 1) / 2)] || 1 : 1;
+
+    const denomByPerson = new Map<string, number>();
+    for (const [personId, { weight, present }] of wp)
+      denomByPerson.set(personId, weight * (present / refWeeks));
+
+    // Balance one scope: every person with a denominator carries a ratio =
+    // (already-worked + assigned-now hours in this scope) / denom_p. `seatFilter`
+    // restricts the assigned-now seats counted; `existing` supplies the matching
+    // already-worked hours. Run once globally, or once per shift type. People with
+    // neither prior hours nor a candidate seat here are skipped.
+    const addFairness = (existing: Map<string, number>, seatFilter: (sv: SeatVar) => boolean) => {
+      interface RatioPerson { c: number; terms: [string, number][]; max: number }
+      const people: RatioPerson[] = [];
+      for (const [personId, segs] of seatVarsByPerson) {
+        const denom = denomByPerson.get(personId);
+        if (denom === undefined) continue;
+        const c = (existing.get(personId) ?? 0) / denom;
+        const terms: [string, number][] = [];
+        let assignable = 0;
+        for (const s of segs) {
+          if (!seatFilter(s)) continue;
+          const durHours = (s.end - s.start) / 3_600_000;
+          terms.push([s.v, durHours / denom]);
+          assignable += durHours / denom;
+        }
+        if (c === 0 && terms.length === 0) continue; // nothing in this scope
+        people.push({ c, terms, max: c + assignable });
+      }
+
+      if (people.length < 2) return;
       const w = fairness.weight;
       const ratioUb = Math.max(...people.map((p) => p.max));
       if (fairness.mode === "deviation") {
@@ -343,6 +425,13 @@ export function buildAssignmentModel(data: AppData, shifts: Shift[]): ModelConte
         }
         penalties.push([M, -w], [m, w]);
       }
+    };
+
+    if (fairness.perShiftType) {
+      for (const st of data.shiftTypes)
+        addFairness(existingByType.get(st.id) ?? new Map(), (sv) => typeByShift.get(sv.shiftId) === st.id);
+    } else {
+      addFairness(existingTotal, () => true);
     }
   }
 

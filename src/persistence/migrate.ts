@@ -9,7 +9,7 @@
  * and let Zod's `safeParse` produce the usual fallback + error list.
  */
 
-import { SCHEMA_VERSION, DEFAULT_SHIFT_TYPE_ID } from "../model/schema";
+import { SCHEMA_VERSION, DEFAULT_SHIFT_TYPE_ID, DEFAULT_SHIFT_TYPE_COLOR, SHIFT_TYPE_COLORS } from "../model/schema";
 import { newId } from "../model/store";
 
 type Obj = Record<string, unknown>;
@@ -90,11 +90,35 @@ function v5ToV6(raw: Obj): Obj {
   };
 }
 
+/**
+ * v6 → v7: attributes lost the `valued` flag (and `personAttributes` their
+ * `value`) — they are now plain boolean tags — and shift types gained a `color`.
+ * Stripping the dropped keys is handled by Zod; here we backfill a color per
+ * type so old types render with distinct hues instead of all-default grey.
+ */
+function v6ToV7(raw: Obj): Obj {
+  const palette = SHIFT_TYPE_COLORS;
+  let i = 0;
+  const types = Array.isArray(raw.shiftTypes) ? raw.shiftTypes : [];
+  const shiftTypes = types.map((t) => {
+    if (!isObj(t)) return t;
+    if (typeof t.color === "string") return t;
+    const color = t.id === DEFAULT_SHIFT_TYPE_ID ? DEFAULT_SHIFT_TYPE_COLOR : palette[i++ % palette.length];
+    return { ...t, color };
+  });
+  return {
+    ...raw,
+    shiftTypes,
+    meta: { ...(isObj(raw.meta) ? raw.meta : {}), schemaVersion: 7 },
+  };
+}
+
 /** Ordered migration steps; index by the *source* version they upgrade from. */
 const STEPS: Record<number, (raw: Obj) => Obj> = {
   3: v3ToV4,
   4: v4ToV5,
   5: v5ToV6,
+  6: v6ToV7,
 };
 
 /**

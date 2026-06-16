@@ -26,22 +26,30 @@ function fmtLocalDateTime(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-export async function assignPeople(rangeStart: Date, rangeEnd: Date): Promise<AssignSummary> {
+export async function assignPeople(
+  rangeStart: Date,
+  rangeEnd: Date,
+  onLog?: (line: string) => void,
+): Promise<AssignSummary> {
   const data = getAppData();
   const startStr = fmtLocalDateTime(rangeStart);
   const endStr = fmtLocalDateTime(rangeEnd);
   const shifts = data.shifts.filter((s) => s.start >= startStr && s.start < endStr);
 
-  const ctx = buildAssignmentModel(data, shifts);
+  const ctx = buildAssignmentModel(data, shifts, rangeStart, rangeEnd);
   const s = ctx.stats;
   console.log(
     `[rotatool] assign: ${ctx.seatsConsidered} open seats, ${s.binaries} binaries, ` +
       `${s.continuous} continuous, ${s.constraints} constraints, ${s.nonzeros} nonzeros`,
   );
-  const solution = await solveLP(ctx.lp, {
-    time_limit: data.solverSettings.solveTimeLimitSeconds,
-    mip_rel_gap: 0.01,
-  });
+  const solution = await solveLP(
+    ctx.lp,
+    {
+      time_limit: data.solverSettings.solveTimeLimitSeconds,
+      mip_rel_gap: 0.01,
+    },
+    onLog,
+  );
   return applyAssignments(interpretSolution(solution, ctx));
 }
 

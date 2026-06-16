@@ -64,7 +64,8 @@
   <table class="data">
     <thead>
       <tr>
-        <th style="width: 60%;">Name</th>
+        <th style="width: 55%;">Name</th>
+        <th>Color</th>
         <th>In use</th>
         <th></th>
       </tr>
@@ -84,6 +85,15 @@
             {:else if isDefault}
               <span class="muted" style="font-size:12px;">default type</span>
             {/if}
+          </td>
+          <td>
+            <input
+              type="color"
+              value={st.color}
+              onchange={(e) => updateShiftType(st.id, { color: e.currentTarget.value })}
+              title="Color used in the rota grid"
+              style="width: 40px; height: 28px; padding: 0; cursor: pointer;"
+            />
           </td>
           <td>{usageOf(st.id)}</td>
           <td style="text-align:right;">

@@ -24,7 +24,7 @@
 import { z } from "zod";
 
 /** Bumped whenever the persisted shape changes. */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /** Non-empty identifier string (internal id or a name reference). */
 const id = z.string().min(1);
@@ -37,20 +37,16 @@ const isoDateTime = z.iso.datetime({ local: true });
 // Attributes (unify skills, roles, and flags like leader / part-time)
 // ---------------------------------------------------------------------------
 
-/** A named person property: a boolean tag, or a valued attribute (team=Blue). */
+/** A named person property: a boolean tag (skill, role, flag). */
 export const AttributeSchema = z.object({
   id,
   name: z.string().min(1),
-  /** When true the attribute carries a value (e.g. team=Blue); else a boolean tag. */
-  valued: z.boolean().default(false),
 });
 
-/** Junction: a person *has* an attribute, optionally with a value. */
+/** Junction: a person *has* an attribute. */
 export const PersonAttributeSchema = z.object({
   personId: id,
   attributeId: id,
-  /** Present only for valued attributes; omitted for boolean tags. */
-  value: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -126,15 +122,32 @@ export const ShiftRequirementSchema = z.object({
  */
 export const DEFAULT_SHIFT_TYPE_ID = "__default";
 
+/** Neutral grey used for the built-in default shift type. */
+export const DEFAULT_SHIFT_TYPE_COLOR = "#9ca3af";
+
+/** Palette new shift types cycle through (distinct, readable hues). */
+export const SHIFT_TYPE_COLORS = [
+  "#2563eb", // blue
+  "#16a34a", // green
+  "#d97706", // amber
+  "#dc2626", // red
+  "#9333ea", // purple
+  "#0891b2", // cyan
+  "#db2777", // pink
+  "#65a30d", // lime
+] as const;
+
 /** A named shift category (org-defined), referenced by `typeId` on shifts. */
 export const ShiftTypeSchema = z.object({
   id,
   name: z.string().min(1),
+  /** Display color (hex), used to tint this type's shifts in the rota grid. */
+  color: z.string().default(DEFAULT_SHIFT_TYPE_COLOR),
 });
 
 /** A fresh default shift type, seeded into every new dataset. */
-export function defaultShiftType(): { id: string; name: string } {
-  return { id: DEFAULT_SHIFT_TYPE_ID, name: "Unassigned" };
+export function defaultShiftType(): { id: string; name: string; color: string } {
+  return { id: DEFAULT_SHIFT_TYPE_ID, name: "Unassigned", color: DEFAULT_SHIFT_TYPE_COLOR };
 }
 
 // ---------------------------------------------------------------------------
@@ -239,17 +252,25 @@ export const SolverSettingsSchema = z.object({
     windowHours: 24,
   }),
   /**
-   * Balance total workload across people *proportional to each person's weekly
-   * target* — measure each person's hours (already-worked + newly-assigned) as a
-   * ratio of their weekly target (units: weeks), and even those ratios out.
-   * `mode` picks the shape: "deviation" pulls the whole roster toward a shared
-   * ratio (L1); "spread" only squeezes the gap between the busiest and idlest.
-   * People without a workload target carry no ratio and are left out.
+   * Balance each person's *contribution rate over their tenure*: measure hours
+   * (already-worked + newly-assigned) per unit of time the person has been
+   * present, scaled by their workload target read as a *relative weight*, and
+   * even those rates out. So a longer-tenured person is expected to have done
+   * proportionally more, and a half-weight part-timer about half — and only the
+   * ratios between targets matter, not the absolute hours entered (a blank target
+   * means a full share). `mode` picks the shape: "deviation" pulls the whole
+   * roster toward a shared rate (L1); "spread" only squeezes the gap between the
+   * busiest and idlest.
+   *
+   * `perShiftType` runs the balancing once per shift type instead of over total
+   * hours — so e.g. nobody ends up doing all the cooking while another does all
+   * the kiosk shifts, even if their totals match.
    */
-  fairness: Term.extend({ mode: z.enum(["spread", "deviation"]) }).default({
+  fairness: Term.extend({ mode: z.enum(["spread", "deviation"]), perShiftType: z.boolean() }).default({
     enabled: false,
     weight: 1,
     mode: "deviation",
+    perShiftType: false,
   }),
 });
 

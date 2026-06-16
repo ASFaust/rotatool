@@ -8,7 +8,7 @@
  */
 
 import { appData, newId } from "./store";
-import { DEFAULT_SHIFT_TYPE_ID } from "./schema";
+import { DEFAULT_SHIFT_TYPE_ID, SHIFT_TYPE_COLORS } from "./schema";
 import type { AppData, Person, Attribute, ShiftType, ShiftTemplate, ShiftRequirement, TemplateRequirement } from "./types";
 
 /**
@@ -67,7 +67,7 @@ export function removePerson(id: string): void {
 export function addAttribute(name: string): string {
   const id = newId();
   mutate((d) => {
-    d.attributes.push({ id, name, valued: false });
+    d.attributes.push({ id, name });
   });
   return id;
 }
@@ -100,14 +100,13 @@ export function removeAttribute(id: string): void {
 
 // --- Person <-> attribute tags --------------------------------------------
 
-/** Add or update the tag linking a person to an attribute. */
-export function setPersonAttribute(personId: string, attributeId: string, value?: string): void {
+/** Add the tag linking a person to an attribute (no-op if already present). */
+export function setPersonAttribute(personId: string, attributeId: string): void {
   mutate((d) => {
     const existing = d.personAttributes.find(
       (pa) => pa.personId === personId && pa.attributeId === attributeId,
     );
-    if (existing) existing.value = value;
-    else d.personAttributes.push({ personId, attributeId, value });
+    if (!existing) d.personAttributes.push({ personId, attributeId });
   });
 }
 
@@ -156,7 +155,11 @@ export function updatePrefillSettings(patch: Partial<import("./types").PrefillSe
 export function addShiftType(name: string): string {
   const id = newId();
   mutate((d) => {
-    d.shiftTypes.push({ id, name });
+    // Cycle the palette by how many non-default types already exist, so fresh
+    // types get distinct, predictable colors.
+    const n = d.shiftTypes.filter((t) => t.id !== DEFAULT_SHIFT_TYPE_ID).length;
+    const color = SHIFT_TYPE_COLORS[n % SHIFT_TYPE_COLORS.length];
+    d.shiftTypes.push({ id, name, color });
   });
   return id;
 }

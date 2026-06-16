@@ -6,7 +6,7 @@
  * anything previously imported.
  */
 
-import { AppDataSchema, SCHEMA_VERSION, defaultShiftType } from "../model/schema";
+import { AppDataSchema, SCHEMA_VERSION, defaultShiftType, SHIFT_TYPE_COLORS } from "../model/schema";
 import type { AppData } from "../model/types";
 import { newId } from "../model/store";
 import { createSeedData } from "./io";
@@ -53,7 +53,7 @@ function createArchelonData(): AppData {
   const attributes = ATTRIBUTE_NAMES.map((name) => {
     const id = newId();
     attrId[name] = id;
-    return { id, name, valued: false };
+    return { id, name };
   });
 
   // [name, start, end (undefined = open-ended), hours/week target, attributes]
@@ -100,7 +100,8 @@ function createArchelonData(): AppData {
     const existing = shiftTypes.find((t) => t.name === name);
     if (existing) return existing.id;
     const id = newId();
-    shiftTypes.push({ id, name });
+    const n = shiftTypes.length - 1; // exclude the default type when cycling colors
+    shiftTypes.push({ id, name, color: SHIFT_TYPE_COLORS[n % SHIFT_TYPE_COLORS.length] });
     return id;
   };
 
@@ -183,6 +184,9 @@ function createArchelonData(): AppData {
     availability,
     shiftTypes,
     shiftTemplates,
+    // Workload is dynamic through June, so enable the fairness objective: the
+    // 20h/week targets act as relative load shares (see the docstring above).
+    solverSettings: { fairness: { enabled: true, weight: 1, mode: "deviation", perShiftType: false } },
     // Open the Ledger on the first week (May 31 – June 6, 2027).
     ledgerView: { from: "2027-05-31", to: "2027-06-06" },
   });

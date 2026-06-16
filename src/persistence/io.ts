@@ -6,7 +6,7 @@
  * lossless round-trip with zero ceremony.
  */
 
-import { AppDataSchema, SCHEMA_VERSION, defaultShiftType } from "../model/schema";
+import { AppDataSchema, SCHEMA_VERSION, defaultShiftType, SHIFT_TYPE_COLORS } from "../model/schema";
 import type { AppData } from "../model/types";
 import { newId } from "../model/store";
 import { migrate } from "./migrate";
@@ -61,8 +61,8 @@ export function createSeedData(): AppData {
   return AppDataSchema.parse({
     meta: { schemaVersion: SCHEMA_VERSION, appVersion: "0.0.0" },
     attributes: [
-      { id: cookId, name: "cook", valued: false },
-      { id: supId, name: "supervisor", valued: false },
+      { id: cookId, name: "cook" },
+      { id: supId, name: "supervisor" },
     ],
     persons: [
       { id: aliceId, name: "Alice", activated: true },
@@ -79,7 +79,7 @@ export function createSeedData(): AppData {
       { personId: bobId, kind: "available", start: "2026-01-01" },
       { personId: carolId, kind: "available", start: "2026-01-01" },
     ],
-    shiftTypes: [defaultShiftType(), { id: serviceTypeId, name: "service" }],
+    shiftTypes: [defaultShiftType(), { id: serviceTypeId, name: "service", color: SHIFT_TYPE_COLORS[0] }],
     shiftTemplates: [
       {
         id: newId(),

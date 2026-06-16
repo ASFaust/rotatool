@@ -1,6 +1,24 @@
 <script lang="ts">
   import { appData } from "../model/store";
   import { mutate } from "../model/mutations";
+  import { solverRun } from "../solver/solverLog";
+
+  const run = $derived($solverRun);
+  const solving = $derived(run.running);
+  const runSeconds = $derived(
+    run.running
+      ? run.elapsedSec
+      : run.startedAt && run.finishedAt
+        ? Math.round((run.finishedAt - run.startedAt) / 1000)
+        : 0,
+  );
+
+  // Keep the log pinned to the newest line as it streams in.
+  let logEl = $state<HTMLPreElement>();
+  $effect(() => {
+    run.lines.length; // track
+    if (logEl) logEl.scrollTop = logEl.scrollHeight;
+  });
 
   // The objective is a weighted sum: coverage rewards each filled slot (scaled by
   // the shift's importance), breaks subtracts a soft penalty for cutting rest
@@ -10,7 +28,7 @@
 
   function patchTerm(
     key: "coverage" | "breaks" | "peakWindow" | "fairness",
-    patch: { enabled?: boolean; weight?: number; windowHours?: number; mode?: "spread" | "deviation" },
+    patch: { enabled?: boolean; weight?: number; windowHours?: number; mode?: "spread" | "deviation"; perShiftType?: boolean },
   ) {
     mutate((d) => Object.assign(d.solverSettings[key], patch));
   }
@@ -31,7 +49,7 @@
     terms; coverage fills slots, breaks subtracts a soft penalty.
   </p>
 
-  <section class="block">
+  <section class="block lockable" inert={solving}>
     <h3>Solver</h3>
     <label class="row">
       <span class="rlabel">Solve time limit</span>
@@ -44,6 +62,24 @@
   </section>
 
   <section class="block">
+    <h3>Solver log</h3>
+    <p class="sub">Live HiGHS output from the last “Assign people” run. The progress rows show the optimality gap shrinking toward the 1% target — when it gets there (or the time limit hits), the solver stops.</p>
+    <div class="log-status">
+      {#if run.running}
+        <span class="dot running"></span><span>Running — {runSeconds}s elapsed</span>
+      {:else if run.status}
+        <span class="dot done"></span><span>{run.status}{runSeconds ? ` — ${runSeconds}s` : ""}</span>
+      {:else}
+        <span class="dot idle"></span><span>Idle — run “Assign people” on the Ledger tab.</span>
+      {/if}
+      {#if run.gap !== null}<span class="gap">gap {(run.gap * 100).toFixed(1)}%</span>{/if}
+    </div>
+    {#if run.lines.length > 0}
+      <pre class="log" bind:this={logEl}>{run.lines.join("\n")}</pre>
+    {/if}
+  </section>
+
+  <section class="block lockable" inert={solving}>
     <h3>Objective terms</h3>
     {#each terms as t}
       <div class="term">
@@ -86,6 +122,10 @@
         </label>
         {#if s.fairness.enabled}
           <span class="cap">
+            <label class="subcheck">
+              <input type="checkbox" checked={s.fairness.perShiftType} onchange={(e) => patchTerm("fairness", { perShiftType: e.currentTarget.checked })} />
+              per shift type
+            </label>
             <select value={s.fairness.mode} onchange={(e) => patchTerm("fairness", { mode: e.currentTarget.value as "spread" | "deviation" })}>
               <option value="deviation">Balance everyone</option>
               <option value="spread">Squeeze the extremes</option>
@@ -94,7 +134,7 @@
           <input class="weight" type="number" step="0.1" value={s.fairness.weight} onchange={(e) => patchTerm("fairness", { weight: Number(e.currentTarget.value) })} />
         {/if}
       </div>
-      <p class="sub">Even out total workload <em>proportional to each person's weekly target</em>: measure everyone's hours — already worked (Person Hours seed + tracked ledger) plus newly assigned — as a fraction of their weekly target, and level those out. <em>Balance everyone</em> pulls the whole roster toward a shared level; <em>Squeeze the extremes</em> only narrows the gap between the busiest and idlest. People with no workload target set are left out.</p>
+      <p class="sub">Even out each person's <em>contribution rate over the time they've been around</em>: measure their hours — already worked (Person Hours seed + tracked ledger) plus newly assigned — per week they've been present, scaled by their workload target as a <em>relative</em> weight, and level those rates out. So someone here twice as long is expected to have done about twice the work, and a half-weight part-timer about half — only the ratio between targets matters, not the exact hours (a blank target counts as a full share). <em>Balance everyone</em> pulls the whole roster toward a shared rate; <em>Squeeze the extremes</em> only narrows the gap between the busiest and idlest. <em>Per shift type</em> balances each shift type on its own, so the mix of work is fair too — not just the totals.</p>
     </div>
   </section>
 </div>
@@ -113,7 +153,23 @@
   .tname { font-size: 15px; color: var(--text-h); font-weight: 600; }
   .cap { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13px; color: var(--text); }
   .cap input { width: 4.5em; }
+  .subcheck { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .subcheck input { width: auto; }
   .cap + .weight { margin-left: 12px; }
   .weight { width: 6em; margin-left: auto; }
   input[type="number"] { width: 6em; }
+  .log-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-h); margin: 8px 0; }
+  .log-status .gap { margin-left: auto; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.running { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .dot.done { background: #2e9e5b; }
+  .dot.idle { background: var(--border); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .lockable[inert] { opacity: 0.5; }
+  .log {
+    margin: 0; max-height: 320px; overflow: auto; background: var(--code-bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    font-size: 12px; line-height: 1.45; color: var(--text); white-space: pre;
+    font-variant-numeric: tabular-nums;
+  }
 </style>

@@ -13,6 +13,13 @@
   import SolverSettingsView from "./ui/SolverSettingsView.svelte";
   import LedgerView from "./ui/LedgerView.svelte";
   import PersonHoursView from "./ui/PersonHoursView.svelte";
+  import { solverRun, abortRun } from "./solver/solverLog";
+
+  // While a solve runs, lock data editing app-wide so the snapshot the solver is
+  // working from can't shift under it. The running banner (abort + elapsed) and
+  // the Solver tab (live log) stay interactive; everything else is inert.
+  const run = $derived($solverRun);
+  const solving = $derived(run.running);
 
   type Tab = "overview" | "people" | "attributes" | "shiftTypes" | "shifts" | "solver" | "ledger" | "personHours";
   const tabs: { id: Tab; label: string }[] = [
@@ -131,11 +138,12 @@
     <span class="muted">client-side rota generator</span>
   </div>
   <div class="actions">
-    <button class="btn ghost" onclick={() => fileInput.click()}>Import .json…</button>
+    <button class="btn ghost" onclick={() => fileInput.click()} disabled={solving}>Import .json…</button>
     <button class="btn ghost" onclick={saveWorkbook}>Save .json</button>
     <div class="menu-wrap">
       <button
         class="btn ghost"
+        disabled={solving}
         onclick={(e) => {
           e.stopPropagation();
           examplesOpen = !examplesOpen;
@@ -154,7 +162,7 @@
         </div>
       {/if}
     </div>
-    <button class="btn ghost" onclick={clearAll}>Clear</button>
+    <button class="btn ghost" onclick={clearAll} disabled={solving}>Clear</button>
     <input bind:this={fileInput} type="file" accept=".json" onchange={onFileChosen} hidden />
   </div>
 </header>
@@ -167,11 +175,22 @@
   {/each}
 </nav>
 
+{#if solving}
+  <div class="solving-banner">
+    <span class="dot"></span>
+    <span class="banner-text">
+      Solver running — editing is locked. Watch the log on the <strong>Solver</strong> tab.
+    </span>
+    <span class="banner-elapsed">{run.elapsedSec}s / {run.timeLimitSec}s</span>
+    <button class="btn danger" onclick={abortRun}>Abort solve</button>
+  </div>
+{/if}
+
 {#if status}
   <p class="status">{status}</p>
 {/if}
 
-<main class="content">
+<main class="content" inert={solving && tab !== "ledger" && tab !== "solver"}>
   {#if tab === "overview"}
     <div class="view">
       <h2>Overview</h2>
@@ -337,9 +356,36 @@
     padding: 8px 12px;
     border-radius: 6px;
   }
+  .solving-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 24px 0;
+    font-size: 14px;
+    color: var(--text-h);
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    padding: 8px 12px;
+    border-radius: 6px;
+  }
+  .solving-banner .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: none;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .banner-text { flex: 1; }
+  .banner-elapsed {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-h);
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
   .content {
     padding: 24px;
   }
+  .content[inert] { opacity: 0.55; }
   .summary {
     list-style: none;
     padding: 0;

@@ -18,7 +18,7 @@
   } from "../model/ledger";
   import { setLedgerView } from "../model/mutations";
   import { formatDateTime } from "../util/dates";
-  import { assignPeople } from "../solver/generate";
+  import { solverRun, runAssign } from "../solver/solverLog";
   import { ledgerToCsv, ledgerToIcs, ledgerToPrintHtml } from "../persistence/export";
 
   // --- view range (date-only strings) --------------------------------------
@@ -54,7 +54,14 @@
   let zoom = $state(0);
   let selectedId = $state<string | null>(null);
   let status = $state("");
-  let busy = $state(false);
+  // The solve run lives in a shared store so it survives this tab unmounting
+  // (the solver keeps going while you browse). `solving` also locks editing.
+  const run = $derived($solverRun);
+  const solving = $derived(run.running);
+  const progress = $derived(
+    run.timeLimitSec > 0 ? Math.min(1, run.elapsedSec / run.timeLimitSec) : 0,
+  );
+  const lastLine = $derived(run.lines.length ? run.lines[run.lines.length - 1] : "");
   // Display mode: the compact timeline, or the person × day rota grid. Both share
   // the selection (selectedId) and the detail/assignment panel below.
   let displayMode = $state<"timeline" | "grid">("timeline");
@@ -208,6 +215,15 @@
   });
   const hhmm = (iso: string) => iso.slice(11, 16);
 
+  // Rota-grid chips are tinted by their shift type's color: the type color as
+  // border, a translucent wash of it as background.
+  const typeColor = (typeId: string) =>
+    $appData.shiftTypes.find((t) => t.id === typeId)?.color ?? "#9ca3af";
+  const chipStyle = (s: Shift) => {
+    const c = typeColor(s.typeId);
+    return `border-color: ${c}; background: color-mix(in srgb, ${c} 18%, transparent);`;
+  };
+
   const conflicts = $derived(reconcileAvailability($appData));
 
   // --- fill state -----------------------------------------------------------
@@ -271,16 +287,8 @@
     }
   }
   async function doAssign() {
-    busy = true;
-    status = "Assigning people…";
-    try {
-      const r = await assignPeople(selFrom, selTo);
-      status = `${r.status}: filled ${r.seatsFilled} of ${r.seatsConsidered} open slot(s).`;
-    } catch (e) {
-      status = "Assign failed: " + e;
-    } finally {
-      busy = false;
-    }
+    status = "";
+    await runAssign(selFrom, selTo);
   }
   function doClear() {
     if (!confirm("Clear all people assignments on shifts in this range?")) return;
@@ -337,19 +345,34 @@
 
   <div class="row" style="gap: 16px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap;">
     <DateRangePicker start={rangeStart} end={rangeEnd} onChange={setLedgerView} />
-    <button class="btn" onclick={doPrefill}>Prefill timeframe</button>
-    <button class="btn" onclick={doAssign} disabled={busy}>{busy ? "Assigning…" : "Assign people"}</button>
-    <button class="btn ghost" onclick={doClear}>Clear assignments</button>
-    <button class="btn danger" onclick={doDeleteShifts}>Delete all shifts in range</button>
+    <button class="btn" onclick={doPrefill} disabled={solving}>Prefill timeframe</button>
+    <button class="btn" onclick={doAssign} disabled={solving}>Assign people</button>
+    <button class="btn ghost" onclick={doClear} disabled={solving}>Clear assignments</button>
+    <button class="btn danger" onclick={doDeleteShifts} disabled={solving}>Delete all shifts in range</button>
     <div class="export-group">
       <span class="cap">Export</span>
-      <button class="btn ghost" onclick={doExportCsv}>CSV</button>
-      <button class="btn ghost" onclick={doExportIcs}>Calendar (.ics)</button>
-      <button class="btn ghost" onclick={doPrint}>Print</button>
+      <button class="btn ghost" onclick={doExportCsv} disabled={solving}>CSV</button>
+      <button class="btn ghost" onclick={doExportIcs} disabled={solving}>Calendar (.ics)</button>
+      <button class="btn ghost" onclick={doPrint} disabled={solving}>Print</button>
     </div>
   </div>
 
-  {#if status}<p class="status-inline">{status}</p>{/if}
+  {#if solving}
+    <div class="solve-progress">
+      <div class="solve-head">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="solve-label">Solving… {run.elapsedSec}s / {run.timeLimitSec}s</span>
+        {#if run.gap !== null}<span class="solve-gap">gap {(run.gap * 100).toFixed(1)}%</span>{/if}
+      </div>
+      <div class="bar"><div class="bar-fill" style="width: {(progress * 100).toFixed(1)}%"></div></div>
+      {#if lastLine}<code class="solve-last">{lastLine}</code>{/if}
+      <p class="sub">Editing is locked while solving. Full solver output is on the <strong>Solver</strong> tab.</p>
+    </div>
+  {:else if status}
+    <p class="status-inline">{status}</p>
+  {:else if run.message}
+    <p class="status-inline">{run.message}</p>
+  {/if}
 
   {#if conflicts.length > 0}
     <div class="banner">
@@ -462,8 +485,9 @@
                   >
                     {#each row?.get(d.key) ?? [] as s (s.id)}
                       <button
-                        class="chip {fillClass(s)}"
+                        class="chip"
                         class:selected={s.id === selectedId}
+                        style={chipStyle(s)}
                         onclick={() => (selectedId = s.id)}
                         title="{s.name} {hhmm(s.start)}"
                       >
@@ -483,8 +507,9 @@
                     {#each grid.open.get(d.key) ?? [] as s (s.id)}
                       {@const f = fill(s)}
                       <button
-                        class="chip {fillClass(s)}"
+                        class="chip"
                         class:selected={s.id === selectedId}
+                        style={chipStyle(s)}
                         onclick={() => (selectedId = s.id)}
                         title="{s.name} {hhmm(s.start)} — {f.filled}/{f.total} filled"
                       >
@@ -504,7 +529,7 @@
 
   <!-- Detail / assignment panel -->
   {#if selected}
-    <div class="card" style="margin-top: 16px;">
+    <div class="card" style="margin-top: 16px;" inert={solving}>
       <div class="card-head">
         <input class="grow" value={selected.name} onchange={(e) => updateShift(selected.id, { name: e.currentTarget.value.trim() })} style="font-size: 16px; font-weight: 600;" />
         <button class="btn ghost icon" onclick={() => (selectedId = null)}>Close</button>
@@ -599,6 +624,26 @@
     font-size: 14px; color: var(--text-h); background: var(--code-bg);
     padding: 6px 10px; border-radius: 6px; margin: 0 0 12px;
   }
+  .card[inert] { opacity: 0.5; }
+  .solve-progress {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; margin: 0 0 12px;
+  }
+  .solve-head { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-h); }
+  .solve-label { font-variant-numeric: tabular-nums; }
+  .solve-gap { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 8px 0 6px; }
+  .bar-fill { height: 100%; background: var(--accent); transition: width 0.4s linear; }
+  .solve-last {
+    display: block; font-size: 12px; color: var(--text); white-space: pre; overflow-x: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .solve-progress .sub { font-size: 12px; color: var(--text); margin: 6px 0 0; }
+  .spinner {
+    width: 13px; height: 13px; border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .banner {
     border: 1px solid rgba(192, 57, 43, 0.4); background: rgba(192, 57, 43, 0.08);
     border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px;
@@ -672,9 +717,6 @@
   .chip:last-child { margin-bottom: 0; }
   .chip:hover { box-shadow: var(--shadow); }
   .chip.selected { outline: 2px solid var(--accent); }
-  .chip.unfilled { border-color: #b02a1c; background: rgba(176, 42, 28, 0.22); }
-  .chip.partial { border-color: #a06f00; background: rgba(160, 111, 0, 0.24); }
-  .chip.filled { border-color: #1f8049; background: rgba(31, 128, 73, 0.22); }
   .chip .c-name { font-size: 12px; font-weight: 600; color: var(--text-h); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip .c-time { font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 </style>
