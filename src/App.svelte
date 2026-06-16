@@ -22,7 +22,7 @@
     { id: "shiftTypes", label: "Shift Types" },
     { id: "shifts", label: "Shifts" },
     { id: "solver", label: "Solver" },
-    { id: "ledger", label: "Ledger" },
+    { id: "ledger", label: "Rota" },
     { id: "personHours", label: "Person Hours" },
   ];
   let tab = $state<Tab>("overview");
@@ -31,6 +31,21 @@
   let status = $state<string>("");
   let fileInput: HTMLInputElement;
   let examplesOpen = $state(false);
+
+  const THEME_KEY = "rotatool-theme";
+  function initialTheme(): "light" | "dark" {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  let theme = $state<"light" | "dark">(initialTheme());
+  $effect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  });
+  function toggleTheme() {
+    theme = theme === "dark" ? "light" : "dark";
+  }
 
   const counts = $derived([
     ["Persons", $appData.persons.length],
@@ -94,6 +109,25 @@
 <header class="topbar">
   <div class="brand">
     <strong>Rotatool</strong>
+    <button
+      class="theme-toggle"
+      onclick={toggleTheme}
+      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {#if theme === "dark"}
+        <!-- sun: currently dark, click for light -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        </svg>
+      {:else}
+        <!-- moon: currently light, click for dark -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      {/if}
+    </button>
     <span class="muted">client-side rota generator</span>
   </div>
   <div class="actions">
@@ -197,6 +231,31 @@
   }
   .brand .muted {
     font-size: 13px;
+  }
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin-right: 8px;
+    vertical-align: middle;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-h);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .theme-toggle:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .actions {
     display: flex;

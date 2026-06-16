@@ -1,13 +1,15 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
+  /* High-contrast light palette: tuned for readability on laptop screens
+     in bright/sunny outdoor conditions (field use). */
+  --text: #15131b;
+  --text-h: #000000;
+  --bg: #ffffff;
+  --border: #807e88;
+  --code-bg: #ececdf;
+  --accent: #8e1fd6;
+  --accent-bg: rgba(142, 31, 214, 0.16);
+  --accent-border: rgba(142, 31, 214, 0.75);
+  --social-bg: rgba(0, 0, 0, 0.06);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -30,23 +32,49 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+/* High-contrast dark palette. Applied when the user explicitly opts in via
+   the theme toggle (data-theme="dark"), or by OS preference when no explicit
+   choice has been made (no data-theme set). */
+:root[data-theme="dark"],
+:root:not([data-theme]) {
+  --dark-text: #d6d9e0;
+  --dark-text-h: #ffffff;
+  --dark-bg: #0e0f14;
+  --dark-border: #5a5e6c;
+  --dark-code-bg: #1f2028;
+  --dark-accent: #d8a8ff;
+  --dark-accent-bg: rgba(216, 168, 255, 0.22);
+  --dark-accent-border: rgba(216, 168, 255, 0.7);
+  --dark-social-bg: rgba(255, 255, 255, 0.08);
+  --dark-shadow:
+    rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+}
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+:root[data-theme="dark"] {
+  --text: var(--dark-text);
+  --text-h: var(--dark-text-h);
+  --bg: var(--dark-bg);
+  --border: var(--dark-border);
+  --code-bg: var(--dark-code-bg);
+  --accent: var(--dark-accent);
+  --accent-bg: var(--dark-accent-bg);
+  --accent-border: var(--dark-accent-border);
+  --social-bg: var(--dark-social-bg);
+  --shadow: var(--dark-shadow);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --text: var(--dark-text);
+    --text-h: var(--dark-text-h);
+    --bg: var(--dark-bg);
+    --border: var(--dark-border);
+    --code-bg: var(--dark-code-bg);
+    --accent: var(--dark-accent);
+    --accent-bg: var(--dark-accent-bg);
+    --accent-border: var(--dark-accent-border);
+    --social-bg: var(--dark-social-bg);
+    --shadow: var(--dark-shadow);
   }
 }
 

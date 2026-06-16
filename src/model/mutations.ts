@@ -11,11 +11,24 @@ import { appData, newId } from "./store";
 import { DEFAULT_SHIFT_TYPE_ID } from "./schema";
 import type { AppData, Person, Attribute, ShiftType, ShiftTemplate, ShiftRequirement, TemplateRequirement } from "./types";
 
-/** Apply an in-place mutation to the dataset and trigger reactivity. */
+/**
+ * Apply an in-place mutation to the dataset and trigger reactivity.
+ *
+ * We mutate a deep clone and return that fresh structure rather than the same
+ * (or shallowly-copied) reference. Svelte 5's store→rune bridge (`$appData` in
+ * components) compares with strict `!==`, and so does every intermediate
+ * `$derived` — e.g. `selected = $appData.shifts.find(...)`. If a mutator edits a
+ * nested slot/requirement in place, those references don't change, so the
+ * detail panel and timeline would stay stale until a reload even though the
+ * persisted data was updated. Deep-cloning gives every touched level a new
+ * reference, which is the immutable-update model Svelte's reactivity expects.
+ * The dataset is small (an in-browser rota tool) so the clone cost is trivial.
+ */
 export function mutate(fn: (data: AppData) => void): void {
   appData.update((data) => {
-    fn(data);
-    return data;
+    const next = structuredClone(data);
+    fn(next);
+    return next;
   });
 }
 

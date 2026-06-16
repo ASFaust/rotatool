@@ -33,7 +33,7 @@ export interface ExampleTemplate {
  *
  * Workload is dynamic (demand / people-on-site varies through June), so the
  * fairness objective is enabled and hours/week targets act as relative load
- * shares: leaders 60h/wk, volunteers 40h/wk.
+ * shares: everyone (leaders included) carries the same 20h/wk target.
  */
 function createArchelonData(): AppData {
   const ATTRIBUTE_NAMES = [
@@ -57,28 +57,27 @@ function createArchelonData(): AppData {
   });
 
   // [name, start, end (undefined = open-ended), hours/week target, attributes]
-  // Hours targets express *relative* load shares for the fairness objective:
-  // leaders (60h/wk) carry 1.5x a volunteer's (40h/wk) share.
+  // Everyone (leaders included) carries the same 20h/week target.
   const PEOPLE: Array<[string, string, string | undefined, number, AttrName[]]> = [
     // Leaders
-    ["Maria Konstantinou", "2027-05-10", undefined, 60, ["camp leader", "MS leader", "presenter", "greek", "english", "german", "driver"]],
-    ["Lukas Brandt", "2027-05-15", undefined, 60, ["camp leader", "MS leader", "presenter", "german", "english", "french", "driver"]],
+    ["Maria Konstantinou", "2027-05-10", undefined, 20, ["camp leader", "MS leader", "presenter", "greek", "english", "german", "driver"]],
+    ["Lukas Brandt", "2027-05-15", undefined, 20, ["camp leader", "MS leader", "presenter", "german", "english", "french", "driver"]],
     // Volunteers
-    ["Sofia Müller", "2027-05-01", "2027-06-15", 40, ["MS leader", "presenter", "german", "english", "driver"]],
-    ["Thomas Weber", "2027-05-15", "2027-07-31", 40, ["MS leader", "english", "german", "driver"]],
-    ["Elena Rossi", "2027-05-20", "2027-06-20", 40, ["presenter", "english", "french", "italian"]],
-    ["James Carter", "2027-06-01", "2027-08-31", 40, ["english", "driver"]],
-    ["Camille Dubois", "2027-06-01", "2027-07-15", 40, ["presenter", "french", "english"]],
-    ["Anna Schmidt", "2027-05-10", "2027-06-30", 40, ["MS leader", "german", "english", "driver"]],
-    ["Yiannis Pappas", "2027-05-25", "2027-08-25", 40, ["greek", "english", "driver"]],
-    ["Laura Bianchi", "2027-06-05", "2027-09-05", 40, ["english", "french"]],
-    ["Max Fischer", "2027-06-10", "2027-07-10", 40, ["german", "english", "driver"]],
-    ["Chloé Martin", "2027-05-20", "2027-06-18", 40, ["presenter", "french", "english", "driver"]],
-    ["David Jones", "2027-06-01", "2027-07-31", 40, ["english", "driver"]],
-    ["Nadia Hofmann", "2027-06-12", "2027-09-12", 40, ["MS leader", "german", "english"]],
-    ["Petros Nikolaou", "2027-05-30", "2027-06-28", 40, ["greek", "english", "driver"]],
-    ["Sarah Klein", "2027-06-08", "2027-08-08", 40, ["german", "english"]],
-    ["Marco Conti", "2027-06-15", "2027-09-15", 40, ["english", "italian", "driver"]],
+    ["Sofia Müller", "2027-05-01", "2027-06-15", 20, ["MS leader", "presenter", "german", "english", "driver"]],
+    ["Thomas Weber", "2027-05-15", "2027-07-31", 20, ["MS leader", "english", "german", "driver"]],
+    ["Elena Rossi", "2027-05-20", "2027-06-20", 20, ["presenter", "english", "french", "italian"]],
+    ["James Carter", "2027-06-01", "2027-08-31", 20, ["english", "driver"]],
+    ["Camille Dubois", "2027-06-01", "2027-07-15", 20, ["presenter", "french", "english"]],
+    ["Anna Schmidt", "2027-05-10", "2027-06-30", 20, ["MS leader", "german", "english", "driver"]],
+    ["Yiannis Pappas", "2027-05-25", "2027-08-25", 20, ["greek", "english", "driver"]],
+    ["Laura Bianchi", "2027-06-05", "2027-09-05", 20, ["english", "french"]],
+    ["Max Fischer", "2027-06-10", "2027-07-10", 20, ["german", "english", "driver"]],
+    ["Chloé Martin", "2027-05-20", "2027-06-18", 20, ["presenter", "french", "english", "driver"]],
+    ["David Jones", "2027-06-01", "2027-07-31", 20, ["english", "driver"]],
+    ["Nadia Hofmann", "2027-06-12", "2027-09-12", 20, ["MS leader", "german", "english"]],
+    ["Petros Nikolaou", "2027-05-30", "2027-06-28", 20, ["greek", "english", "driver"]],
+    ["Sarah Klein", "2027-06-08", "2027-08-08", 20, ["german", "english"]],
+    ["Marco Conti", "2027-06-15", "2027-09-15", 20, ["english", "italian", "driver"]],
   ];
 
   const persons: AppData["persons"] = [];
@@ -114,6 +113,7 @@ function createArchelonData(): AppData {
     frequencyDays: number,
     slots: Array<{ attrs: AttrName[]; count: number; required?: boolean }>,
     breakMinutes = 0,
+    anchorDate = "2027-05-01", // anchor for daily shifts; weekly shifts pass their own
   ) => {
     shiftTemplates.push({
       id: newId(),
@@ -123,7 +123,7 @@ function createArchelonData(): AppData {
       activated: true,
       durationMinutes,
       breakMinutes,
-      activationDateTime: `2027-06-01T${time}:00`,
+      activationDateTime: `${anchorDate}T${time}:00`,
       frequency: { value: frequencyDays, unit: "days" },
       requirements: slots.map(({ attrs, count, required }) => ({
         attributeIds: attrs.map((a) => attrId[a]),
@@ -143,13 +143,13 @@ function createArchelonData(): AppData {
   // Daily shifts (pinned day + time). Each MS team: 1 required MS leader,
   // 1 required anyone, 1 optional anyone.
   for (const team of ["A", "B", "C"]) {
-    addTemplate(`Morning Survey ${team}`, CONSERVATION, "05:00", 480, 1, [
+    addTemplate(`Morning Survey ${team}`, CONSERVATION, "05:00", 240, 1, [
       { attrs: ["MS leader"], count: 1, required: true },
       { attrs: [], count: 1, required: true },
       { attrs: [], count: 1 },
-    ]);
+    ], 120);
   }
-  addTemplate("MS Driver", CAMP, "05:00", 480, 1, [{ attrs: ["driver"], count: 1, required: true }]);
+  addTemplate("MS Driver", CAMP, "05:00", 180, 1, [{ attrs: ["driver"], count: 1, required: true }], 180);
   addTemplate("Cooking", CAMP, "14:00", 120, 1, [{ attrs: [], count: 2 }]);
   // Kiosk shifts abut (08–11, 11–14, 14–17); the 1h break makes back-to-back
   // kiosk for the same person cost an hour of violated break time.
@@ -158,19 +158,22 @@ function createArchelonData(): AppData {
   addTemplate("Kiosk 3", PA, "14:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
 
   // Weekly shifts pinned to a fixed day + time (the anchor weekday). Five
-  // presentation templates ≙ five presentations per week, ≥1 presenter each.
+  // presentation templates ≙ five presentations per week, ≥1 presenter each,
+  // spread across the week: never on Sunday, two on Monday and one each on
+  // Tue/Wed/Thu. (June 2027: Mon=07, Tue=01, Wed=02, Thu=03; Sun=06.)
   // The presentation's 8h break (until 07:00) discourages putting the same
   // person on a 05:00 morning survey next day.
-  for (let i = 1; i <= 5; i++) {
-    addTemplate(`Presentation ${i}`, PA, "19:00", 240, 7, [
+  const presentationAnchors = ["2027-06-07", "2027-06-07", "2027-06-01", "2027-06-02", "2027-06-03"];
+  presentationAnchors.forEach((anchorDate, idx) => {
+    addTemplate(`Presentation ${idx + 1}`, PA, "19:00", 240, 7, [
       { attrs: ["presenter"], count: 1, required: true },
       { attrs: [], count: 2 },
-    ], 480);
-  }
+    ], 480, anchorDate);
+  });
   addTemplate("Grocery shop", CAMP, "10:00", 120, 7, [
     { attrs: ["driver"], count: 1, required: true },
     { attrs: [], count: 1 },
-  ]);
+  ], 0, "2027-06-01");
 
   return AppDataSchema.parse({
     meta: { schemaVersion: SCHEMA_VERSION, appVersion: "0.0.0" },
@@ -180,8 +183,8 @@ function createArchelonData(): AppData {
     availability,
     shiftTypes,
     shiftTemplates,
-    // Open the Ledger on the whole month of July 2027.
-    ledgerView: { from: "2027-07-01", to: "2027-07-31" },
+    // Open the Ledger on the first week (May 31 – June 6, 2027).
+    ledgerView: { from: "2027-05-31", to: "2027-06-06" },
   });
 }
 
