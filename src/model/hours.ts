@@ -7,11 +7,18 @@
 
 import type { AppData, PersonHours } from "./types";
 
-/** A filled slot contributes its shift's whole duration; null slots are ignored. */
-export function computeDerivedHours(data: AppData): Map<string, Map<string, number>> {
+/**
+ * A filled slot contributes its shift's whole duration; null slots are ignored.
+ * `before` (optional) excludes shifts starting at/after that instant — the solver
+ * passes the window end so the fairness `e_p` only counts work whose span lines
+ * up with the tenure denominator (which also runs through the window end).
+ */
+export function computeDerivedHours(data: AppData, before?: Date): Map<string, Map<string, number>> {
+  const cutoff = before?.getTime();
   // personId -> (typeId -> summed hours)
   const out = new Map<string, Map<string, number>>();
   for (const s of data.shifts) {
+    if (cutoff !== undefined && new Date(s.start).getTime() >= cutoff) continue;
     const hrs = s.durationMinutes / 60;
     for (const r of s.requirements) {
       for (const slot of r.slots) {

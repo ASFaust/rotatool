@@ -21,22 +21,16 @@ export interface AssignSummary {
   seatsConsidered: number;
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-function fmtLocalDateTime(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
 export async function assignPeople(
   rangeStart: Date,
   rangeEnd: Date,
   onLog?: (line: string) => void,
 ): Promise<AssignSummary> {
   const data = getAppData();
-  const startStr = fmtLocalDateTime(rangeStart);
-  const endStr = fmtLocalDateTime(rangeEnd);
-  const shifts = data.shifts.filter((s) => s.start >= startStr && s.start < endStr);
-
-  const ctx = buildAssignmentModel(data, shifts, rangeStart, rangeEnd);
+  // Pass the full ledger: buildAssignmentModel selects the window itself (seats
+  // from shifts starting in it) and pulls neighbouring shifts in as a bounded
+  // halo of busy time so cross-boundary overlaps/breaks/peak are respected.
+  const ctx = buildAssignmentModel(data, data.shifts, rangeStart, rangeEnd);
   const s = ctx.stats;
   console.log(
     `[rotatool] assign: ${ctx.seatsConsidered} open seats, ${s.binaries} binaries, ` +

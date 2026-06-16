@@ -85,13 +85,20 @@ interface SeatVar {
 }
 
 /**
- * Build the LP that fills empty slots across the given concrete shifts.
- * `rangeStart`/`rangeEnd` bound the solve window; the fairness term needs them to
- * pro-rate each person's load over the time they've been present (tenure).
+ * Build the LP that fills empty slots over the window [rangeStart, rangeEnd).
+ * Pass the *full* shift list as `allShifts`: the model creates seats only for
+ * shifts that *start* in the window, but a shift starting outside it can still
+ * constrain in-window seats (a still-running shift, a break reaching in, the peak
+ * rolling window), so its *filled* slots are pulled in as fixed busy time. That
+ * "halo" is bounded by time (the largest shift footprint and, if enabled, the
+ * peak window), so it doesn't grow as the ledger fills up over a season.
+ *
+ * `rangeStart`/`rangeEnd` also let the fairness term pro-rate each person's load
+ * over the time they've been present (tenure).
  */
 export function buildAssignmentModel(
   data: AppData,
-  shifts: Shift[],
+  allShifts: Shift[],
   rangeStart: Date,
   rangeEnd: Date,
 ): ModelContext {
@@ -102,25 +109,48 @@ export function buildAssignmentModel(
   for (const p of data.persons) if (p.activated) attrsByPerson.set(p.id, new Set());
   for (const pa of data.personAttributes) attrsByPerson.get(pa.personId)?.add(pa.attributeId);
 
+  const winStart = rangeStart.getTime();
+  const winEnd = rangeEnd.getTime();
+
+  // Halo margin: how far outside the window a *filled* shift can still reach an
+  // in-window seat. Overlap and breaks reach at most one shift footprint
+  // (duration + break) either side; the peak term reaches its window width. Use
+  // the max so the halo is provably complete, yet bounded by time rather than by
+  // total ledger size.
+  const peakCfg = data.solverSettings.peakWindow;
+  const peakWindowMs = peakCfg.enabled && peakCfg.weight > 0 ? peakCfg.windowHours * 3_600_000 : 0;
+  let maxFootprintMs = 0;
+  for (const s of allShifts)
+    maxFootprintMs = Math.max(maxFootprintMs, (s.durationMinutes + s.breakMinutes) * 60_000);
+  const haloMs = Math.max(maxFootprintMs, peakWindowMs);
+
   // Split slots into empty seats (to fill) and fixed assignments (busy time).
+  // Seats come only from shifts starting in the window; halo shifts (starting
+  // outside but reaching in) contribute their filled slots as busy time only.
   const seats: Seat[] = [];
   const busyByPerson = new Map<string, Busy[]>();
   const addBusy = (pid: string, iv: Busy) =>
     (busyByPerson.get(pid) ?? busyByPerson.set(pid, []).get(pid)!).push(iv);
 
-  for (const s of shifts) {
+  for (const s of allShifts) {
     const start = new Date(s.start).getTime();
     const end = start + s.durationMinutes * 60_000;
     const breakMs = s.breakMinutes * 60_000;
-    s.requirements.forEach((r, reqIndex) => {
-      r.slots.forEach((slot, slotIndex) => {
-        if (slot === null) {
-          seats.push({ shiftId: s.id, reqIndex, slotIndex, start, end, breakMs, importance: s.importance, required: r.required, attributeIds: r.attributeIds });
-        } else {
-          addBusy(slot, { start, end, breakMs });
-        }
+    if (start >= winStart && start < winEnd) {
+      s.requirements.forEach((r, reqIndex) => {
+        r.slots.forEach((slot, slotIndex) => {
+          if (slot === null) {
+            seats.push({ shiftId: s.id, reqIndex, slotIndex, start, end, breakMs, importance: s.importance, required: r.required, attributeIds: r.attributeIds });
+          } else {
+            addBusy(slot, { start, end, breakMs });
+          }
+        });
       });
-    });
+    } else if (start >= winStart - haloMs && start < winEnd + haloMs) {
+      // Halo shift: only its filled slots matter, and only as busy time.
+      for (const r of s.requirements)
+        for (const slot of r.slots) if (slot !== null) addBusy(slot, { start, end, breakMs });
+    }
   }
 
   const coverageWeight = data.solverSettings.coverage.enabled ? data.solverSettings.coverage.weight : 0;
@@ -244,10 +274,9 @@ export function buildAssignmentModel(
   // maximum — no time grid needed. A shift counts in full if its start lies in
   // the window. `peak` is integer minutes: a trivial roster could leave it a
   // column singleton, and one integer aux var is cheap (see addContinuous).
-  const peakCfg = data.solverSettings.peakWindow;
-  if (peakCfg.enabled && peakCfg.weight > 0) {
+  if (peakWindowMs > 0) {
     const perMinute = peakCfg.weight / 60; // weight is per hour of peak window
-    const windowMs = peakCfg.windowHours * 3_600_000;
+    const windowMs = peakWindowMs;
 
     interface DatedMin { start: number; min: number; v?: string }
     const loadByPerson = new Map<string, DatedMin[]>();
@@ -255,8 +284,13 @@ export function buildAssignmentModel(
       (loadByPerson.get(pid) ?? loadByPerson.set(pid, []).get(pid)!).push(x);
     for (const [pid, segs] of seatVarsByPerson)
       for (const s of segs) addLoad(pid, { start: s.start, min: (s.end - s.start) / 60_000, v: s.v });
+    // Busy intervals include the wider overlap/break halo; for peak only those
+    // whose start can share a rolling window with an in-window seat matter
+    // (within one window width of the range), so filter to avoid spurious anchors.
     for (const [pid, ivs] of busyByPerson)
-      for (const iv of ivs) addLoad(pid, { start: iv.start, min: (iv.end - iv.start) / 60_000 });
+      for (const iv of ivs)
+        if (iv.start >= winStart - windowMs && iv.start < winEnd + windowMs)
+          addLoad(pid, { start: iv.start, min: (iv.end - iv.start) / 60_000 });
 
     // A window can't hold more than all of a person's work; the largest such
     // total bounds the peak. (Skip building the var if nobody works at all.)
@@ -327,7 +361,7 @@ export function buildAssignmentModel(
       bump(existingTotal, ph.personId, ph.hours);
       bump(typeBucket(ph.typeId), ph.personId, ph.hours);
     }
-    for (const [pid, byType] of computeDerivedHours(data))
+    for (const [pid, byType] of computeDerivedHours(data, rangeEnd))
       for (const [typeId, h] of byType) {
         bump(existingTotal, pid, h);
         bump(typeBucket(typeId), pid, h);
@@ -335,7 +369,7 @@ export function buildAssignmentModel(
 
     // shiftId -> typeId, to group candidate seats by shift type.
     const typeByShift = new Map<string, string>();
-    for (const s of shifts) typeByShift.set(s.id, s.typeId);
+    for (const s of allShifts) typeByShift.set(s.id, s.typeId);
 
     // Per-person fairness denominator = relative weight · normalized tenure. The
     // weight is the entered weekly target read as a pure ratio; a blank target

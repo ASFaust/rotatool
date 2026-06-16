@@ -186,7 +186,13 @@ function createArchelonData(): AppData {
     shiftTemplates,
     // Workload is dynamic through June, so enable the fairness objective: the
     // 20h/week targets act as relative load shares (see the docstring above).
-    solverSettings: { fairness: { enabled: true, weight: 1, mode: "deviation", perShiftType: false } },
+    solverSettings: {
+      solveTimeLimitSeconds: 120,
+      coverage: { enabled: true, weight: 1 },
+      breaks: { enabled: true, weight: 1 },
+      peakWindow: { enabled: true, weight: 1, windowHours: 36 },
+      fairness: { enabled: true, weight: 1, mode: "spread", perShiftType: true },
+    },
     // Open the Ledger on the first week (May 31 – June 6, 2027).
     ledgerView: { from: "2027-05-31", to: "2027-06-06" },
   });
