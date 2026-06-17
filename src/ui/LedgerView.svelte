@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { flip } from "svelte/animate";
   import { appData } from "../model/store";
   import DateRangePicker from "./DateRangePicker.svelte";
   import {
@@ -230,16 +231,14 @@
   // --- drag-to-reassign (grid) ---------------------------------------------
   // A chip in person P's row is one filled slot of a shift, tagged with its
   // role (the requirement's `label`). A shift never moves between days, only
-  // between people — so dragging lights up the shift's *day column*, and each
-  // person's cell in that column is tinted by whether they're a valid pick:
-  // green = available & qualified, red = unavailable or lacks the role's
-  // attributes (still droppable as a manual override), grey = can't drop
-  // (already in this shift, or the source). Dropping an Unassigned chip
-  // (fromPid = null) fills the shift's first open slot for that role; dropping
-  // any chip on the Unassigned row clears it.
-  type DragPayload = { shiftId: string; fromPid: string | null; dayKey: string };
+  // between people. While a chip is being dragged we *hide* every person row
+  // that isn't a valid target, so the grid collapses to just the people you can
+  // drop on. Dropping an Unassigned chip (fromPid = null) fills the shift's
+  // first open slot for that role; dropping any chip on the Unassigned row
+  // clears it.
+  type DragPayload = { shiftId: string; fromPid: string | null };
   let drag = $state<DragPayload | null>(null);
-  let hoverPid = $state<string | null>(null); // person cell currently hovered
+  let hoverPid = $state<string | null>(null); // person row currently hovered
 
   function findSlot(s: Shift, pid: string): { ri: number; si: number } | null {
     for (let ri = 0; ri < s.requirements.length; ri++) {
@@ -266,9 +265,6 @@
     return (at && s.requirements[at.ri].label) || "";
   }
 
-  // Drop validity of person `pid` for the in-flight drag, used to tint the
-  // active day column. null = not a target (no drag, or wrong column handled
-  // by the caller). "blocked" can't be dropped; "ok"/"warn" can.
   /** Whether `pid` already fills any slot of a *different* shift that overlaps `s` in time. */
   function hasTimeClash(s: Shift, pid: string): boolean {
     const aStart = new Date(s.start).getTime();
@@ -283,23 +279,57 @@
     return false;
   }
 
-  type DropState = "ok" | "warn" | "blocked";
-  function dropState(pid: string): DropState | null {
-    if (!drag) return null;
+  /** Can the dragged chip be physically reassigned to `pid`? Not the source, not
+   *  already in the shift, and there's a slot to fill. Allowed even as an
+   *  override (unavailable / unqualified / time clash) so swaps are possible. */
+  function canAssignPerson(pid: string): boolean {
+    if (!drag) return false;
     const s = $appData.shifts.find((x) => x.id === drag!.shiftId);
-    if (!s) return null;
-    if (pid === drag.fromPid || findSlot(s, pid)) return "blocked"; // source, or already in shift
-    if (hasTimeClash(s, pid)) return "blocked"; // already working an overlapping shift
-    const tgt = targetReq(s);
-    if (!tgt) return "blocked"; // nothing to fill (unassigned drag, no open slot)
-    const ok =
-      isPersonAvailable($appData, pid, new Date(s.start)) &&
-      eligible(s, s.requirements[tgt.ri].attributeIds, pid);
-    return ok ? "ok" : "warn";
+    if (!s) return false;
+    if (pid === drag.fromPid || findSlot(s, pid)) return false; // source, or already in shift
+    return targetReq(s) !== null; // a slot exists to fill
   }
+  /** A *clean* target: assignable AND available, qualified, no time clash. These
+   *  rows stay expanded; everything else collapses to a name-only strip. */
+  function canDropPerson(pid: string): boolean {
+    if (!canAssignPerson(pid)) return false;
+    const s = $appData.shifts.find((x) => x.id === drag!.shiftId)!;
+    const tgt = targetReq(s)!;
+    return (
+      !hasTimeClash(s, pid) &&
+      isPersonAvailable($appData, pid, new Date(s.start)) &&
+      eligible(s, s.requirements[tgt.ri].attributeIds, pid)
+    );
+  }
+
+  // While dragging, gather eligible targets next to the row you're dragging
+  // from — WITHOUT moving that row. Trick: reorder the people *above* the source
+  // only among themselves and the people *below* only among themselves. Each
+  // group keeps the same members (so its total height is unchanged), which pins
+  // the source row's screen position; eligible rows just bubble to the edge of
+  // their group nearest the source. Dragging from Unassigned (no source row in
+  // the list) keeps the person set intact and floats eligible rows to the
+  // bottom, next to the Unassigned row. FLIP animates the shuffle smoothly.
+  const orderedPersons = $derived.by(() => {
+    const persons = $appData.persons;
+    if (!drag) return persons;
+    const good = (p: (typeof persons)[number]) => canDropPerson(p.id);
+    if (drag.fromPid === null) {
+      return [...persons.filter((p) => !good(p)), ...persons.filter(good)];
+    }
+    const k = persons.findIndex((p) => p.id === drag!.fromPid);
+    if (k === -1) return persons;
+    const above = persons.slice(0, k);
+    const below = persons.slice(k + 1);
+    return [
+      ...above.filter((p) => !good(p)), ...above.filter(good), // eligible sink to just above source
+      persons[k],
+      ...below.filter(good), ...below.filter((p) => !good(p)), // eligible rise to just below source
+    ];
+  });
+
   function onDropPerson(pid: string) {
-    const st = dropState(pid);
-    if (drag && (st === "ok" || st === "warn")) {
+    if (drag && canAssignPerson(pid)) {
       const s = $appData.shifts.find((x) => x.id === drag!.shiftId)!;
       const tgt = targetReq(s)!;
       assignSlot(s.id, tgt.ri, tgt.si, pid);
@@ -557,23 +587,25 @@
             </tr>
           </thead>
           <tbody>
-            {#each $appData.persons as p (p.id)}
+            {#each orderedPersons as p (p.id)}
               {@const row = grid.byPerson.get(p.id)}
-              <tr>
+              {@const droppable = !!drag && canDropPerson(p.id)}
+              {@const assignable = !!drag && canAssignPerson(p.id)}
+              {@const hovered = hoverPid === p.id}
+              <tr
+                animate:flip={{ duration: 180 }}
+                class:droppable
+                class:drop-hover={droppable && hovered}
+                class:drop-hover-warn={assignable && !droppable && hovered}
+                ondragover={(e) => { if (assignable) { e.preventDefault(); hoverPid = p.id; } }}
+                ondragleave={() => { if (hovered) hoverPid = null; }}
+                ondrop={(e) => { if (assignable) { e.preventDefault(); onDropPerson(p.id); } }}
+              >
                 <th class="rowhead">{p.name}</th>
                 {#each grid.days as d (d.key)}
-                  {@const inCol = drag?.dayKey === d.key}
-                  {@const st = inCol ? dropState(p.id) : null}
                   <td
                     class:away={!isPersonAvailable($appData, p.id, d.date)}
-                    class:drop-ok={st === "ok"}
-                    class:drop-warn={st === "warn"}
-                    class:drop-blocked={st === "blocked"}
-                    class:drop-hover={inCol && hoverPid === p.id}
                     title={isPersonAvailable($appData, p.id, d.date) ? undefined : `${p.name} not available`}
-                    ondragover={(e) => { if (inCol && st !== "blocked") { e.preventDefault(); hoverPid = p.id; } }}
-                    ondragleave={() => { if (hoverPid === p.id) hoverPid = null; }}
-                    ondrop={(e) => { if (inCol) { e.preventDefault(); onDropPerson(p.id); } }}
                   >
                     {#each row?.get(d.key) ?? [] as s (s.id)}
                       {@const role = roleOf(s, p.id)}
@@ -583,7 +615,7 @@
                         class:dragging={drag?.shiftId === s.id && drag?.fromPid === p.id}
                         style={chipStyle(s)}
                         draggable={!solving}
-                        ondragstart={() => (drag = { shiftId: s.id, fromPid: p.id, dayKey: d.key })}
+                        ondragstart={() => (drag = { shiftId: s.id, fromPid: p.id })}
                         ondragend={() => { drag = null; hoverPid = null; }}
                         onclick={() => (selectedId = s.id)}
                         title="{s.name}{role ? ` — ${role}` : ''} {hhmm(s.start)} — drag to reassign"
@@ -598,15 +630,17 @@
               </tr>
             {/each}
             {#if grid.anyOpen}
-              <tr class="open-row">
+              {@const clearHere = !!drag && drag.fromPid !== null}
+              <tr
+                class="open-row"
+                class:drop-clear={clearHere && hoverPid === "__open__"}
+                ondragover={(e) => { if (clearHere) { e.preventDefault(); hoverPid = "__open__"; } }}
+                ondragleave={() => { if (hoverPid === "__open__") hoverPid = null; }}
+                ondrop={(e) => { if (clearHere) { e.preventDefault(); onDropUnassigned(); } }}
+              >
                 <th class="rowhead">Unassigned</th>
                 {#each grid.days as d (d.key)}
-                  {@const clearHere = drag?.dayKey === d.key && drag?.fromPid !== null}
-                  <td
-                    class:drop-clear={clearHere}
-                    ondragover={(e) => { if (clearHere) e.preventDefault(); }}
-                    ondrop={(e) => { if (clearHere) { e.preventDefault(); onDropUnassigned(); } }}
-                  >
+                  <td>
                     {#each grid.open.get(d.key) ?? [] as s (s.id)}
                       {@const f = fill(s)}
                       {@const role = roleOf(s, null)}
@@ -616,7 +650,7 @@
                         class:dragging={drag?.shiftId === s.id && drag?.fromPid === null}
                         style={chipStyle(s)}
                         draggable={!solving}
-                        ondragstart={() => (drag = { shiftId: s.id, fromPid: null, dayKey: d.key })}
+                        ondragstart={() => (drag = { shiftId: s.id, fromPid: null })}
                         ondragend={() => { drag = null; hoverPid = null; }}
                         onclick={() => (selectedId = s.id)}
                         title="{s.name}{role ? ` — open: ${role}` : ''} {hhmm(s.start)} — {f.filled}/{f.total} filled · drag onto a person to assign"
@@ -835,18 +869,12 @@
   .chip[draggable="true"] { cursor: grab; }
   .chip.dragging { opacity: 0.4; }
   .role-input { width: 120px; font-weight: 600; }
-  /* Active day-column drop feedback while a chip is being dragged: valid target
-     cells stay bright; everything you can't/shouldn't drop on is greyed out so
-     the good picks pop. (drop-warn = unavailable or unqualified — still
-     droppable as an override, but dimmed.) */
-  .matrix td.drop-ok {
-    background-color: color-mix(in srgb, var(--accent) 16%, transparent);
-    box-shadow: inset 0 0 0 2px var(--accent);
-  }
-  .matrix td.drop-warn, .matrix td.drop-blocked {
-    background-color: color-mix(in srgb, var(--text) 22%, var(--bg));
-    opacity: 0.4;
-  }
-  .matrix td.drop-hover { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .matrix td.drop-clear { background-color: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: inset 0 0 0 1px var(--text); }
+  /* Drag-to-reassign: while dragging, eligible rows gather next to the source
+     row (which stays put) and are tinted; the one under the cursor more so.
+     The Unassigned row doubles as a "clear" target. */
+  .matrix tr.droppable th, .matrix tr.droppable td { background-color: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .matrix tr.drop-hover th, .matrix tr.drop-hover td { background-color: color-mix(in srgb, var(--accent) 20%, transparent); }
+  /* Override drop (unavailable / unqualified / clash) — droppable, but warned in amber. */
+  .matrix tr.drop-hover-warn th, .matrix tr.drop-hover-warn td { background-color: rgba(160, 111, 0, 0.22); }
+  .matrix tr.drop-clear th, .matrix tr.drop-clear td { background-color: color-mix(in srgb, var(--text) 14%, transparent); }
 </style>

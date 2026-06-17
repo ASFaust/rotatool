@@ -80,6 +80,10 @@
 
 body {
   margin: 0;
+  /* Don't let the browser re-anchor scroll when off-screen rows above the
+     viewport reorder (e.g. drag-to-reassign in the rota grid) — that shifts the
+     row you're dragging from. */
+  overflow-anchor: none;
 }
 
 h1,

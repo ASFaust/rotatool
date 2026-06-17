@@ -9,7 +9,8 @@
   import PeopleView from "./ui/PeopleView.svelte";
   import AttributesView from "./ui/AttributesView.svelte";
   import ShiftTypesView from "./ui/ShiftTypesView.svelte";
-  import ShiftsView from "./ui/ShiftsView.svelte";
+  import RecurringShiftsView from "./ui/RecurringShiftsView.svelte";
+  import OneTimeShiftsView from "./ui/OneTimeShiftsView.svelte";
   import SolverSettingsView from "./ui/SolverSettingsView.svelte";
   import LedgerView from "./ui/LedgerView.svelte";
   import PersonHoursView from "./ui/PersonHoursView.svelte";
@@ -21,18 +22,38 @@
   const run = $derived($solverRun);
   const solving = $derived(run.running);
 
-  type Tab = "overview" | "people" | "attributes" | "shiftTypes" | "shifts" | "solver" | "ledger" | "personHours";
+  type Tab = "overview" | "people" | "shifts" | "ledger";
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "people", label: "People" },
-    { id: "attributes", label: "Attributes" },
-    { id: "shiftTypes", label: "Shift Types" },
     { id: "shifts", label: "Shifts" },
-    { id: "solver", label: "Solver" },
     { id: "ledger", label: "Rota" },
-    { id: "personHours", label: "Person Hours" },
   ];
   let tab = $state<Tab>("overview");
+
+  type PeopleTab = "directory" | "attributes" | "personHours";
+  const peopleTabs: { id: PeopleTab; label: string }[] = [
+    { id: "directory", label: "Directory" },
+    { id: "attributes", label: "Attributes" },
+    { id: "personHours", label: "Person Hours" },
+  ];
+  let peopleTab = $state<PeopleTab>("directory");
+
+  type ShiftsTab = "recurring" | "oneTime" | "shiftTypes";
+  const shiftsTabs: { id: ShiftsTab; label: string }[] = [
+    { id: "recurring", label: "Recurring shifts" },
+    { id: "oneTime", label: "One-time shifts" },
+    { id: "shiftTypes", label: "Shift types" },
+  ];
+  let shiftsTab = $state<ShiftsTab>("recurring");
+
+  type RotaTab = "timeline" | "grid" | "solver";
+  const rotaTabs: { id: RotaTab; label: string }[] = [
+    { id: "timeline", label: "Timeline" },
+    { id: "grid", label: "Grid" },
+    { id: "solver", label: "Solver" },
+  ];
+  let rotaTab = $state<RotaTab>("timeline");
 
   let importErrors = $state<CellError[]>([]);
   let status = $state<string>("");
@@ -190,11 +211,40 @@
   <p class="status">{status}</p>
 {/if}
 
-<main class="content" inert={solving && tab !== "ledger" && tab !== "solver"}>
+<main class="content" inert={solving && tab !== "ledger"}>
   {#if tab === "overview"}
     <div class="view">
-      <h2>Overview</h2>
-      <p class="hint">Your data never leaves the browser. Save to .json to back up or share.</p>
+      <section class="intro">
+        <h2>Rotatool</h2>
+        <ul class="facts">
+          <li>
+            <span class="fact-icon" aria-hidden="true">🐢</span>
+            <span>
+              A free, open-source rota planning tool. Set up your people, shift types
+              and constraints, then let the solver build a fair schedule for you.
+            </span>
+          </li>
+          <li>
+            <span class="fact-icon" aria-hidden="true">🛡️</span>
+            <span>
+              <strong>Your data never leaves the browser.</strong>
+              Everything runs locally on your device — nothing is uploaded, tracked or
+              stored on any server. There's no account and no cookies, so it's GDPR
+              compliant by default, simply because no personal data is ever collected.
+            </span>
+          </li>
+          <li>
+            <span class="fact-icon" aria-hidden="true">⚠️</span>
+            <span>
+              The flip side: <strong>nothing is saved for you.</strong> Remember to
+              <em>Save .json</em> regularly to keep your work — closing the tab or
+              clearing site data will discard anything you haven't exported.
+            </span>
+          </li>
+        </ul>
+      </section>
+
+      <h3 class="section-h">Your dataset</h3>
       <ul class="summary">
         {#each counts as [label, n]}
           <li><span class="count">{n}</span> {label}</li>
@@ -217,19 +267,42 @@
       {/if}
     </div>
   {:else if tab === "people"}
-    <PeopleView />
-  {:else if tab === "attributes"}
-    <AttributesView />
-  {:else if tab === "shiftTypes"}
-    <ShiftTypesView />
+    <nav class="subtabs">
+      {#each peopleTabs as st}
+        <button class="subtab" class:active={peopleTab === st.id} onclick={() => (peopleTab = st.id)}>{st.label}</button>
+      {/each}
+    </nav>
+    {#if peopleTab === "directory"}
+      <PeopleView />
+    {:else if peopleTab === "attributes"}
+      <AttributesView />
+    {:else if peopleTab === "personHours"}
+      <PersonHoursView />
+    {/if}
   {:else if tab === "shifts"}
-    <ShiftsView />
-  {:else if tab === "solver"}
-    <SolverSettingsView />
+    <nav class="subtabs">
+      {#each shiftsTabs as st}
+        <button class="subtab" class:active={shiftsTab === st.id} onclick={() => (shiftsTab = st.id)}>{st.label}</button>
+      {/each}
+    </nav>
+    {#if shiftsTab === "recurring"}
+      <RecurringShiftsView />
+    {:else if shiftsTab === "oneTime"}
+      <OneTimeShiftsView />
+    {:else if shiftsTab === "shiftTypes"}
+      <ShiftTypesView />
+    {/if}
   {:else if tab === "ledger"}
-    <LedgerView />
-  {:else if tab === "personHours"}
-    <PersonHoursView />
+    <nav class="subtabs">
+      {#each rotaTabs as rt}
+        <button class="subtab" class:active={rotaTab === rt.id} onclick={() => (rotaTab = rt.id)}>{rt.label}</button>
+      {/each}
+    </nav>
+    {#if rotaTab === "solver"}
+      <SolverSettingsView />
+    {:else}
+      <LedgerView mode={rotaTab} />
+    {/if}
   {/if}
 </main>
 
@@ -348,6 +421,31 @@
     color: var(--accent);
     border-bottom-color: var(--accent);
   }
+  .subtabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin: -20px 0 20px;
+    flex-wrap: wrap;
+  }
+  .subtab {
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    color: var(--text);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .subtab:hover {
+    color: var(--text-h);
+  }
+  .subtab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
   .status {
     margin: 16px 24px 0;
     font-size: 14px;
@@ -386,6 +484,40 @@
     padding: 24px;
   }
   .content[inert] { opacity: 0.55; }
+  .intro {
+    max-width: 720px;
+  }
+  .facts {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .facts li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .fact-icon {
+    flex: none;
+    font-size: 20px;
+    line-height: 1.4;
+  }
+  .facts strong {
+    color: var(--text-h);
+  }
+  .section-h {
+    margin: 28px 0 0;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
   .summary {
     list-style: none;
     padding: 0;
