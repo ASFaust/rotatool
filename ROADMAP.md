@@ -131,6 +131,38 @@ folding into this pass: balance terms competing on the shared hour layer flatten
 the search landscape on month-long ranges (fairness + dailyPeak + breaks plateau
 below coverage-optimum); candidate fix is a two-stage coverage-then-balance solve.
 
+### 7. Small UI polish
+
+Quick, mostly-cosmetic items (all in [src/App.svelte](src/App.svelte) unless
+noted):
+
+- **GitHub link on the Overview page** — link out to the project repo.
+- **Move the dark-mode toggle to the right**, alongside the other action buttons
+  (Undo/Redo/Import/Save/…), instead of in the brand area on the left.
+- **Turtle (🐢) as the site icon** — use it for the favicon (`public/favicon.svg`,
+  referenced from `index.html`).
+- **Drop "client-side rota generator" from the header** — remove that subtitle
+  next to the Rotatool brand.
+
+### 8. Built-in examples cleanup
+
+The bundled examples ([src/persistence/examples.ts](src/persistence/examples.ts),
+spec in [example.md](example.md)) need to be generic and shippable:
+
+- **Remove the ARCHELON / Rethymno branding** — keep the scenario shape (a
+  multi-shift seasonal field project is a good stress test) but strip the
+  real-organisation name and place. Rename `example.md` accordingly.
+- **Remove the "Alice & Bob" simple cook rota** example.
+- **Add examples for other kinds of org/schedule** — e.g. a restaurant, a clinic,
+  a small shop — to show the tool isn't single-purpose.
+
+### 9. Pre-launch / outreach
+
+- **Set up a contact email** for correspondence (bug reports, feedback) and surface
+  it in the app/README.
+- **Record a short YouTube walkthrough** showcasing the tool, and link it from the
+  Overview page / README.
+
 ---
 
 ## Document status
