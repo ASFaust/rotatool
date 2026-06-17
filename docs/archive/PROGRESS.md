@@ -1,3 +1,8 @@
+> **⚠ Archived 2026-06-17 — superseded by [ROADMAP.md](../../ROADMAP.md).**
+> Kept for history. Pre-dates the `shift-rework` model changes (placement enum,
+> xlsx, "Ledger" naming) and is out of date in places; trust the code and
+> ROADMAP.md over it.
+
 # Rotatool — development state / handoff
 
 A living record of where development stands, so work can resume in a fresh

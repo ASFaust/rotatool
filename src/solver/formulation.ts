@@ -320,76 +320,39 @@ export function buildAssignmentModel(
     }
   }
 
-  // Fairness: steer each person toward a precomputed, per-person *target number
-  // of hours to newly assign* this window, then penalize deviation from it. All
-  // the history reasoning lives in a plain pre-pass (computeUtilization); the LP
-  // only sees fixed target constants, so — unlike the old shared-ratio term — the
-  // per-person aux vars are fully decoupled and the relaxation stays tight.
+  // Fairness: even out workload across people. Two regimes, picked by
+  // `fairness.useHistory`:
   //
-  // Per eligible person p and scope (total, or one shift type):
-  //   denom_p   = availableWeeks(start_p → rangeEnd) × weeklyHours_p   (expected hrs)
-  //   worked_p  = seed + ledger-derived hours through rangeEnd (incl. already-filled
-  //               in-window slots — so the new-hours target below isn't double-counted)
-  //   T         = (Σ_elig worked + pool) / Σ_elig denom   ← post-distribution equal
-  //               utilization: the center at which Σ targets = pool, so the targets
-  //               *distribute* the open seats instead of fighting coverage
-  //   Δ_p       = T · denom_p − worked_p                  ← hours to reach the target
-  //   target_p  = clamp(Δ_p, 0, min(maxCatchUp, assignable_p))
+  //  - History-aware (on): steer each person toward a precomputed, per-person
+  //    *target number of hours to newly assign* this window, accounting for what
+  //    they've already worked relative to their availability-aware tenure. All the
+  //    history reasoning lives in a plain pre-pass (computeUtilization); the LP
+  //    sees only fixed target constants, so the aux vars are fully decoupled.
+  //  - Plain (off): no targets, no tenure, no history — just balance the raw hours
+  //    newly assigned this window across everyone who can be assigned.
   //
-  // The clamp's lower 0 is the add-only floor (we can only fill empty seats, never
-  // remove worked hours, so over-utilized people get target 0 → "assign nothing");
-  // its upper bound caps catch-up per window (the ramp knob) and never exceeds the
-  // hours p can physically be given in-window (assignable_p), so an unreachable
-  // target can't inject a constant penalty. Deviation is in *hours* now, so
-  // `fairness.weight` reads as "penalty per hour off target".
-  //
-  // People missing a start date or a positive weekly target are ineligible (no
-  // denom) and silently excluded here — the UI lists them in a warning. The term
-  // is built per scope only with ≥2 people carrying decision hours (meaningless
-  // below that; also keeps every aux var in ≥2 constraints, clear of the
-  // column-singleton presolve trap — see builder.ts).
+  // Either way `mode` selects the shape — "L1" pulls everyone toward a common
+  // value / their own target, "min-max" squeezes the extremes — and `perShiftType`
+  // runs it per type instead of over totals. Quantities are in *hours*, so
+  // `fairness.weight` reads as "penalty per hour" of imbalance. Each scope's term
+  // is built only with ≥2 people carrying decision hours (meaningless below that;
+  // also keeps every aux var in ≥2 constraints, clear of the column-singleton
+  // presolve trap — see builder.ts).
   const fairness = data.solverSettings.fairness;
   if (fairness.enabled && fairness.weight > 0) {
-    const util = computeUtilization(data, rangeEnd);
-    const eligible = [...util.values()].filter((u) => u.eligible);
-    const sumDenom = eligible.reduce((s, u) => s + u.denom, 0);
+    const w = fairness.weight;
+    const neg = (t: [string, number]): [string, number] => [t[0], -t[1]];
 
-    // shiftId -> typeId, to group candidate seats and pool by shift type.
+    // shiftId -> typeId, to group candidate seats (and the pool) by shift type.
     const typeByShift = new Map<string, string>();
     for (const s of allShifts) typeByShift.set(s.id, s.typeId);
 
-    // Pool = open seat-hours available to distribute, per type and overall. (A
-    // slight overcount when ineligible people also take seats — acceptable; the
-    // clamps bound the effect, and it only nudges the center.)
-    const poolByType = new Map<string, number>();
-    let poolTotal = 0;
-    for (const seat of seats) {
-      const durHours = (seat.end - seat.start) / 3_600_000;
-      const t = typeByShift.get(seat.shiftId);
-      if (t) poolByType.set(t, (poolByType.get(t) ?? 0) + durHours);
-      poolTotal += durHours;
-    }
-
-    const w = fairness.weight;
-    const cap = fairness.maxCatchUpHours;
-    const neg = (t: [string, number]): [string, number] => [t[0], -t[1]];
-
-    // Balance one scope. `pool` is the scope's distributable seat-hours; `workedOf`
-    // reads the scope's already-worked hours from a person's utilization; `seatIn`
-    // selects which candidate seats count toward the scope's assigned-hours expr.
-    const addFairness = (
-      pool: number,
-      workedOf: (u: PersonUtilization) => number,
-      seatIn: (sv: SeatVar) => boolean,
-    ) => {
-      if (!(sumDenom > 0)) return;
-      const T = (eligible.reduce((s, u) => s + workedOf(u), 0) + pool) / sumDenom;
-
-      interface DevPerson { terms: [string, number][]; target: number; assignable: number }
-      const people: DevPerson[] = [];
-      for (const u of eligible) {
-        const segs = seatVarsByPerson.get(u.personId);
-        if (!segs) continue;
+    // The candidate seats in one scope for each person: their assigned-hours
+    // expression (terms) and the most they could be given (assignable).
+    interface ScopePerson { personId: string; terms: [string, number][]; assignable: number }
+    const peopleIn = (seatIn: (sv: SeatVar) => boolean): ScopePerson[] => {
+      const out: ScopePerson[] = [];
+      for (const [personId, segs] of seatVarsByPerson) {
         const terms: [string, number][] = [];
         let assignable = 0;
         for (const s of segs) {
@@ -398,38 +361,115 @@ export function buildAssignmentModel(
           terms.push([s.v, durHours]);
           assignable += durHours;
         }
-        if (terms.length === 0) continue; // no decision hours here → nothing to steer
-        const delta = T * u.denom - workedOf(u);
-        const target = Math.max(0, Math.min(delta, cap, assignable));
-        people.push({ terms, target, assignable });
+        if (terms.length > 0) out.push({ personId, terms, assignable });
       }
-      if (people.length < 2) return;
-
-      if (fairness.mode === "L1") {
-        // Independent fixed targets: penalize Σ_p |assigned_p − target_p|.
-        //   dev_p ≥ assigned_p − target_p   and   dev_p ≥ target_p − assigned_p
-        for (const p of people) {
-          const dev = b.addContinuous(0, p.assignable);
-          b.addConstraint([...p.terms, [dev, -1]], "<=", p.target, "fairness");
-          b.addConstraint([...p.terms.map(neg), [dev, -1]], "<=", -p.target, "fairness");
-          penalties.push([dev, -w]);
-        }
-      } else {
-        // Min-max: shrink the single worst |assigned_p − target_p| across people.
-        const M = b.addContinuous(0, Math.max(...people.map((p) => p.assignable)));
-        for (const p of people) {
-          b.addConstraint([...p.terms, [M, -1]], "<=", p.target, "fairness");
-          b.addConstraint([...p.terms.map(neg), [M, -1]], "<=", -p.target, "fairness");
-        }
-        penalties.push([M, -w]);
-      }
+      return out;
     };
 
-    if (fairness.perShiftType) {
-      for (const st of data.shiftTypes)
-        addFairness(poolByType.get(st.id) ?? 0, (u) => u.workedByType.get(st.id) ?? 0, (sv) => typeByShift.get(sv.shiftId) === st.id);
+    if (fairness.useHistory) {
+      // ── History-aware: per-person hour targets from a utilization pre-pass. ──
+      // Per eligible person p and scope:
+      //   denom_p  = availableWeeks(start_p → rangeEnd) × weeklyHours_p   (expected hrs)
+      //   worked_p = seed + ledger-derived hours through rangeEnd (incl. already-
+      //              filled in-window slots, so the target below isn't double-counted)
+      //   T        = (Σ_elig worked + pool) / Σ_elig denom   ← post-distribution equal
+      //              utilization: the center at which Σ targets = pool, so targets
+      //              *distribute* the open seats instead of fighting coverage
+      //   Δ_p      = T · denom_p − worked_p                  ← hours to reach target
+      //   target_p = clamp(Δ_p, 0, min(maxCatchUp, assignable_p))
+      // The lower-0 clamp is the add-only floor (over-utilized people → target 0 =
+      // "assign nothing"); the upper bound caps per-window catch-up and never
+      // exceeds reachable hours, so an unreachable target can't inject a constant
+      // penalty. People without a start date or a positive weekly target are
+      // ineligible (no denom) and excluded — the UI lists them in a warning.
+      const util = computeUtilization(data, rangeEnd);
+      const eligible = new Set([...util.values()].filter((u) => u.eligible).map((u) => u.personId));
+      const sumDenom = [...util.values()].reduce((s, u) => s + (u.eligible ? u.denom : 0), 0);
+      const cap = fairness.maxCatchUpHours;
+
+      const poolByType = new Map<string, number>();
+      let poolTotal = 0;
+      for (const seat of seats) {
+        const durHours = (seat.end - seat.start) / 3_600_000;
+        const t = typeByShift.get(seat.shiftId);
+        if (t) poolByType.set(t, (poolByType.get(t) ?? 0) + durHours);
+        poolTotal += durHours;
+      }
+
+      const addFairness = (pool: number, workedOf: (u: PersonUtilization) => number, seatIn: (sv: SeatVar) => boolean) => {
+        if (!(sumDenom > 0)) return;
+        let sumWorked = 0;
+        for (const u of util.values()) if (u.eligible) sumWorked += workedOf(u);
+        const T = (sumWorked + pool) / sumDenom;
+
+        const people = peopleIn(seatIn)
+          .filter((p) => eligible.has(p.personId))
+          .map((p) => {
+            const u = util.get(p.personId)!;
+            const target = Math.max(0, Math.min(T * u.denom - workedOf(u), cap, p.assignable));
+            return { ...p, target };
+          });
+        if (people.length < 2) return;
+
+        if (fairness.mode === "L1") {
+          // Independent fixed targets: penalize Σ_p |assigned_p − target_p|.
+          for (const p of people) {
+            const dev = b.addContinuous(0, p.assignable);
+            b.addConstraint([...p.terms, [dev, -1]], "<=", p.target, "fairness"); // dev ≥ assigned − target
+            b.addConstraint([...p.terms.map(neg), [dev, -1]], "<=", -p.target, "fairness"); // dev ≥ target − assigned
+            penalties.push([dev, -w]);
+          }
+        } else {
+          // Min-max: shrink the single worst |assigned_p − target_p|.
+          const M = b.addContinuous(0, Math.max(...people.map((p) => p.assignable)));
+          for (const p of people) {
+            b.addConstraint([...p.terms, [M, -1]], "<=", p.target, "fairness");
+            b.addConstraint([...p.terms.map(neg), [M, -1]], "<=", -p.target, "fairness");
+          }
+          penalties.push([M, -w]);
+        }
+      };
+
+      if (fairness.perShiftType) {
+        for (const st of data.shiftTypes)
+          addFairness(poolByType.get(st.id) ?? 0, (u) => u.workedByType.get(st.id) ?? 0, (sv) => typeByShift.get(sv.shiftId) === st.id);
+      } else {
+        addFairness(poolTotal, (u) => u.workedTotal, () => true);
+      }
     } else {
-      addFairness(poolTotal, (u) => u.workedTotal, () => true);
+      // ── Plain: balance the raw hours assigned this window, no history. ──
+      // L1 pulls everyone toward a free shared reference R (penalize Σ|assigned−R|);
+      // min-max squeezes (max assigned − min assigned). Everyone with a candidate
+      // seat is included — no eligibility/tenure needed.
+      const balance = (seatIn: (sv: SeatVar) => boolean) => {
+        const people = peopleIn(seatIn);
+        if (people.length < 2) return;
+        const ub = Math.max(...people.map((p) => p.assignable));
+
+        if (fairness.mode === "L1") {
+          const R = b.addContinuous(0, ub);
+          for (const p of people) {
+            const dev = b.addContinuous(0, ub);
+            b.addConstraint([...p.terms, [R, -1], [dev, -1]], "<=", 0, "fairness"); // dev ≥ assigned − R
+            b.addConstraint([...p.terms.map(neg), [R, 1], [dev, -1]], "<=", 0, "fairness"); // dev ≥ R − assigned
+            penalties.push([dev, -w]);
+          }
+        } else {
+          const M = b.addContinuous(0, ub);
+          const m = b.addContinuous(0, ub);
+          for (const p of people) {
+            b.addConstraint([...p.terms, [M, -1]], "<=", 0, "fairness"); // M ≥ assigned
+            b.addConstraint([...p.terms.map(neg), [m, 1]], "<=", 0, "fairness"); // m ≤ assigned
+          }
+          penalties.push([M, -w], [m, w]);
+        }
+      };
+
+      if (fairness.perShiftType) {
+        for (const st of data.shiftTypes) balance((sv) => typeByShift.get(sv.shiftId) === st.id);
+      } else {
+        balance(() => true);
+      }
     }
   }
 

@@ -1,3 +1,7 @@
+> **⚠ Archived 2026-06-17 — superseded by [ROADMAP.md](../../ROADMAP.md).**
+> This was the unmodified Vite/Svelte template README, never customized for
+> Rotatool. A real project README still needs writing before release.
+
 # Svelte + TS + Vite
 
 This template should help get you started developing with Svelte and TypeScript in Vite.

@@ -1,3 +1,8 @@
+> **⚠ Archived 2026-06-17 — superseded by [ROADMAP.md](../../ROADMAP.md).**
+> Original product design, kept for historical intent. Substantially stale:
+> xlsx persistence (now JSON), "Ledger" naming, `placement: strict/strictTime/
+> anyTime`, and a materialize step that no longer exist.
+
 # Rotatool — a client-side rota generator
 
 ## Context

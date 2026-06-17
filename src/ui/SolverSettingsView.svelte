@@ -29,7 +29,7 @@
 
   function patchTerm(
     key: "coverage" | "breaks" | "peakWindow" | "fairness",
-    patch: { enabled?: boolean; weight?: number; windowHours?: number; mode?: "L1" | "min-max"; perShiftType?: boolean; maxCatchUpHours?: number },
+    patch: { enabled?: boolean; weight?: number; windowHours?: number; mode?: "L1" | "min-max"; perShiftType?: boolean; useHistory?: boolean; maxCatchUpHours?: number },
   ) {
     mutate((d) => Object.assign(d.solverSettings[key], patch));
   }
@@ -131,9 +131,11 @@
         </label>
         {#if s.fairness.enabled}
           <span class="cap">
-            catch-up cap
-            <input type="number" min="0" step="5" value={s.fairness.maxCatchUpHours} onchange={(e) => patchTerm("fairness", { maxCatchUpHours: Math.max(0, Number(e.currentTarget.value)) })} />
-            h
+            {#if s.fairness.useHistory}
+              catch-up cap
+              <input type="number" min="0" step="5" value={s.fairness.maxCatchUpHours} onchange={(e) => patchTerm("fairness", { maxCatchUpHours: Math.max(0, Number(e.currentTarget.value)) })} />
+              h
+            {/if}
             <label class="subcheck">
               <input type="checkbox" checked={s.fairness.perShiftType} onchange={(e) => patchTerm("fairness", { perShiftType: e.currentTarget.checked })} />
               per shift type
@@ -146,9 +148,19 @@
           <input class="weight" type="number" step="0.1" value={s.fairness.weight} onchange={(e) => patchTerm("fairness", { weight: Number(e.currentTarget.value) })} />
         {/if}
       </div>
-      <p class="sub">Balance people by <em>utilization</em> — hours worked (Person Hours seed + tracked ledger) ÷ the hours expected over the time they've been available, at their weekly target. A pre-pass turns each person's pace into a <em>target number of hours to assign this window</em>, and the solver is penalized per hour it lands off target. <em>Balance everyone</em> pulls each person toward their own target; <em>Squeeze the worst</em> only shrinks the single largest miss. The <em>catch-up cap</em> limits how many make-up hours a behind person gets in one window, so a backlog isn't dumped at once. <em>Per shift type</em> balances each type on its own, so the mix is fair too — not just the totals. People without a start date and a weekly target are excluded.</p>
-      {#if s.fairness.enabled && fairnessExcluded.length > 0}
-        <p class="warn">Excluded (no start date or no weekly target): {fairnessExcluded.map((p) => p.name).join(", ")}</p>
+      {#if s.fairness.enabled}
+        <label class="subcheck histtoggle">
+          <input type="checkbox" checked={s.fairness.useHistory} onchange={(e) => patchTerm("fairness", { useHistory: e.currentTarget.checked })} />
+          Account for hours already worked
+        </label>
+      {/if}
+      {#if s.fairness.useHistory}
+        <p class="sub">Balance people by <em>utilization</em> — hours worked (Person Hours seed + tracked ledger) ÷ the hours expected over the time they've been available, at their weekly target. A pre-pass turns each person's pace into a <em>target number of hours to assign this window</em>, and the solver is penalized per hour it lands off target. <em>Balance everyone</em> pulls each person toward their own target; <em>Squeeze the worst</em> only shrinks the single largest miss. The <em>catch-up cap</em> limits how many make-up hours a behind person gets in one window, so a backlog isn't dumped at once. <em>Per shift type</em> balances each type on its own, so the mix is fair too — not just the totals. People without a start date and a weekly target are excluded.</p>
+        {#if s.fairness.enabled && fairnessExcluded.length > 0}
+          <p class="warn">Excluded (no start date or no weekly target): {fairnessExcluded.map((p) => p.name).join(", ")}</p>
+        {/if}
+      {:else}
+        <p class="sub">Even out the <em>hours assigned this window</em> across everyone who can take the shifts — no past hours, tenure, or targets considered. <em>Balance everyone</em> pulls everyone's hours toward a common value; <em>Squeeze the worst</em> only narrows the gap between the busiest and idlest. <em>Per shift type</em> balances each type on its own. Turn on <em>Account for hours already worked</em> to instead aim for fairness over each person's whole history.</p>
       {/if}
     </div>
   </section>
@@ -172,6 +184,7 @@
   .subcheck input { width: auto; }
   .cap + .weight { margin-left: 12px; }
   .warn { margin: 6px 0 0; font-size: 12px; color: var(--text); }
+  .histtoggle { margin-top: 8px; font-size: 13px; color: var(--text); }
   .weight { width: 6em; margin-left: auto; }
   input[type="number"] { width: 6em; }
   .log-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-h); margin: 8px 0; }

@@ -1,3 +1,9 @@
+> **⚠ Archived 2026-06-17 — implemented, no longer pending work.**
+> This was a planning doc; the rework shipped 2026-06-17. The "Resolution (as
+> built)" section at the bottom is the accurate record of the current fairness
+> implementation — read that, ignore the forward-looking "open decisions" above
+> it. Further fairness polish is tracked in [ROADMAP.md](../../ROADMAP.md) (item 6).
+
 # Fairness objective rework — history-aware targets
 
 Status: **implemented 2026-06-17.** The design below stands; the resolved open

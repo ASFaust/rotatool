@@ -256,32 +256,33 @@ export const SolverSettingsSchema = z.object({
     windowHours: 24,
   }),
   /**
-   * Balance workload by *utilization* (hours worked ÷ expected hours over the
-   * person's availability-aware tenure). A history-aware pre-pass turns each
-   * person's pace into a target number of hours to newly assign this window, then
-   * the solver penalizes deviation from that target — `weight` is the penalty per
-   * hour off target. `mode` picks the shape: "L1" pulls everyone toward their own
-   * target; "min-max" shrinks only the single worst deviation.
+   * Balance workload across people. `mode` picks the shape — "L1" pulls everyone
+   * toward a common value / their own target; "min-max" only squeezes the
+   * extremes — and `perShiftType` runs it per shift type instead of over totals.
+   * `weight` is the penalty per hour of imbalance.
    *
-   * `maxCatchUpHours` caps how many catch-up hours a behind person can be handed
-   * in one window (the ramp knob) — so a season's backlog isn't dumped at once.
-   *
-   * `perShiftType` runs the balancing once per shift type instead of over total
-   * hours — so e.g. nobody ends up doing all the cooking while another does all
-   * the kiosk shifts, even if their totals match.
-   *
-   * People missing a start date or a positive weekly target are excluded (and
-   * listed in a warning), replacing the old blank-target fallbacks.
+   * `useHistory` chooses the regime:
+   *  - true: history-aware. Balance by *utilization* (hours worked ÷ expected
+   *    hours over the person's availability-aware tenure); a pre-pass turns each
+   *    person's pace into a target number of hours to newly assign this window and
+   *    the solver penalizes deviation from it. `maxCatchUpHours` caps how many
+   *    catch-up hours a behind person gets in one window (so a backlog isn't
+   *    dumped at once); people without a start date or a positive weekly target
+   *    are excluded (and listed in a warning).
+   *  - false: plain. No targets, tenure, or history — just even out the raw hours
+   *    newly assigned this window across everyone who can be assigned.
    */
   fairness: Term.extend({
     mode: z.enum(["L1", "min-max"]),
     perShiftType: z.boolean(),
+    useHistory: z.boolean().default(true),
     maxCatchUpHours: z.number().nonnegative(),
   }).default({
     enabled: false,
     weight: 1,
     mode: "L1",
     perShiftType: false,
+    useHistory: true,
     maxCatchUpHours: 40,
   }),
 });
