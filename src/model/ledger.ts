@@ -59,6 +59,7 @@ function templateRequirements(t: ShiftTemplate): ShiftRequirement[] {
     attributeIds: [...r.attributeIds],
     required: r.required,
     slots: Array<string | null>(r.count).fill(null),
+    label: r.label,
   }));
 }
 
@@ -82,6 +83,7 @@ function isUntouched(s: Shift, t: ShiftTemplate): boolean {
     return (
       a.slots.length === b.count &&
       a.required === b.required &&
+      a.label === b.label &&
       a.attributeIds.length === b.attributeIds.length &&
       a.attributeIds.every((x, j) => x === b.attributeIds[j])
     );
@@ -242,7 +244,7 @@ export function addRequirement(shiftId: string): void {
 export function updateRequirement(
   shiftId: string,
   reqIndex: number,
-  patch: Partial<Pick<ShiftRequirement, "attributeIds" | "required">>,
+  patch: Partial<Pick<ShiftRequirement, "attributeIds" | "required" | "label">>,
 ): void {
   mutate((d) => {
     const r = d.shifts.find((x) => x.id === shiftId)?.requirements[reqIndex];

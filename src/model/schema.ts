@@ -97,6 +97,8 @@ export const TemplateRequirementSchema = z.object({
   attributeIds: z.array(id).default([]),
   count: z.number().int().positive(),
   required: z.boolean().default(false),
+  /** Optional role name for this group of slots (e.g. "MS leader"), shown on grid chips. */
+  label: z.string().optional(),
 });
 
 /**
@@ -109,6 +111,8 @@ export const ShiftRequirementSchema = z.object({
   attributeIds: z.array(id).default([]),
   required: z.boolean().default(false),
   slots: z.array(z.string().nullable()).default([]),
+  /** Optional role name for this group of slots (e.g. "MS leader"), shown on grid chips. */
+  label: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------

@@ -48,6 +48,10 @@
   const selFrom = $derived(parseDate(rangeStart));
   const selTo = $derived(addDays(parseDate(rangeEnd), 1)); // end day inclusive
 
+  // Display mode is driven by the Rota sub-tab (Timeline / Grid). Both modes share
+  // the selection (selectedId), the action bar, and the detail/assignment panel.
+  let { mode = "timeline" }: { mode?: "timeline" | "grid" } = $props();
+
   let viewportW = $state(0); // measured width of the timeline scroll container
   let scrollEl = $state<HTMLDivElement>(); // the horizontal scroll container
   // zoom: 0 = whole window fills the width, 100 = a single day fills the width.
@@ -62,9 +66,6 @@
     run.timeLimitSec > 0 ? Math.min(1, run.elapsedSec / run.timeLimitSec) : 0,
   );
   const lastLine = $derived(run.lines.length ? run.lines[run.lines.length - 1] : "");
-  // Display mode: the compact timeline, or the person × day rota grid. Both share
-  // the selection (selectedId) and the detail/assignment panel below.
-  let displayMode = $state<"timeline" | "grid">("timeline");
 
   const HOUR_MS = 3_600_000;
   const LANE_H = 50;
@@ -226,6 +227,96 @@
 
   const conflicts = $derived(reconcileAvailability($appData));
 
+  // --- drag-to-reassign (grid) ---------------------------------------------
+  // A chip in person P's row is one filled slot of a shift, tagged with its
+  // role (the requirement's `label`). A shift never moves between days, only
+  // between people — so dragging lights up the shift's *day column*, and each
+  // person's cell in that column is tinted by whether they're a valid pick:
+  // green = available & qualified, red = unavailable or lacks the role's
+  // attributes (still droppable as a manual override), grey = can't drop
+  // (already in this shift, or the source). Dropping an Unassigned chip
+  // (fromPid = null) fills the shift's first open slot for that role; dropping
+  // any chip on the Unassigned row clears it.
+  type DragPayload = { shiftId: string; fromPid: string | null; dayKey: string };
+  let drag = $state<DragPayload | null>(null);
+  let hoverPid = $state<string | null>(null); // person cell currently hovered
+
+  function findSlot(s: Shift, pid: string): { ri: number; si: number } | null {
+    for (let ri = 0; ri < s.requirements.length; ri++) {
+      const si = s.requirements[ri].slots.indexOf(pid);
+      if (si !== -1) return { ri, si };
+    }
+    return null;
+  }
+  function firstOpenSlot(s: Shift): { ri: number; si: number } | null {
+    for (let ri = 0; ri < s.requirements.length; ri++) {
+      const si = s.requirements[ri].slots.indexOf(null);
+      if (si !== -1) return { ri, si };
+    }
+    return null;
+  }
+  /** The requirement a drop would land in: the source's slot (reassign) or the first open one. */
+  function targetReq(s: Shift): { ri: number; si: number } | null {
+    if (!drag) return null;
+    return drag.fromPid !== null ? findSlot(s, drag.fromPid) : firstOpenSlot(s);
+  }
+  /** Role name of the requirement holding `pid` in `s` (or of the first open slot). */
+  function roleOf(s: Shift, pid: string | null): string {
+    const at = pid !== null ? findSlot(s, pid) : firstOpenSlot(s);
+    return (at && s.requirements[at.ri].label) || "";
+  }
+
+  // Drop validity of person `pid` for the in-flight drag, used to tint the
+  // active day column. null = not a target (no drag, or wrong column handled
+  // by the caller). "blocked" can't be dropped; "ok"/"warn" can.
+  /** Whether `pid` already fills any slot of a *different* shift that overlaps `s` in time. */
+  function hasTimeClash(s: Shift, pid: string): boolean {
+    const aStart = new Date(s.start).getTime();
+    const aEnd = aStart + s.durationMinutes * 60_000;
+    for (const o of $appData.shifts) {
+      if (o.id === s.id) continue;
+      const bStart = new Date(o.start).getTime();
+      const bEnd = bStart + o.durationMinutes * 60_000;
+      if (bStart >= aEnd || bEnd <= aStart) continue; // no time overlap
+      if (o.requirements.some((r) => r.slots.includes(pid))) return true;
+    }
+    return false;
+  }
+
+  type DropState = "ok" | "warn" | "blocked";
+  function dropState(pid: string): DropState | null {
+    if (!drag) return null;
+    const s = $appData.shifts.find((x) => x.id === drag!.shiftId);
+    if (!s) return null;
+    if (pid === drag.fromPid || findSlot(s, pid)) return "blocked"; // source, or already in shift
+    if (hasTimeClash(s, pid)) return "blocked"; // already working an overlapping shift
+    const tgt = targetReq(s);
+    if (!tgt) return "blocked"; // nothing to fill (unassigned drag, no open slot)
+    const ok =
+      isPersonAvailable($appData, pid, new Date(s.start)) &&
+      eligible(s, s.requirements[tgt.ri].attributeIds, pid);
+    return ok ? "ok" : "warn";
+  }
+  function onDropPerson(pid: string) {
+    const st = dropState(pid);
+    if (drag && (st === "ok" || st === "warn")) {
+      const s = $appData.shifts.find((x) => x.id === drag!.shiftId)!;
+      const tgt = targetReq(s)!;
+      assignSlot(s.id, tgt.ri, tgt.si, pid);
+    }
+    drag = null;
+    hoverPid = null;
+  }
+  function onDropUnassigned() {
+    if (drag && drag.fromPid !== null) {
+      const s = $appData.shifts.find((x) => x.id === drag!.shiftId);
+      const from = s && findSlot(s, drag.fromPid);
+      if (s && from) assignSlot(s.id, from.ri, from.si, null);
+    }
+    drag = null;
+    hoverPid = null;
+  }
+
   // --- fill state -----------------------------------------------------------
   type Shift = (typeof $appData.shifts)[number];
   function fill(s: Shift): { filled: number; total: number } {
@@ -345,7 +436,7 @@
 
   <div class="row" style="gap: 16px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap;">
     <DateRangePicker start={rangeStart} end={rangeEnd} onChange={setLedgerView} />
-    <button class="btn" onclick={doPrefill} disabled={solving}>Prefill timeframe</button>
+    <button class="btn" onclick={doPrefill} disabled={solving}>Place shifts</button>
     <button class="btn" onclick={doAssign} disabled={solving}>Assign people</button>
     <button class="btn ghost" onclick={doClear} disabled={solving}>Clear assignments</button>
     <button class="btn danger" onclick={doDeleteShifts} disabled={solving}>Delete all shifts in range</button>
@@ -385,15 +476,7 @@
     </div>
   {/if}
 
-  <!-- Display mode toggle -->
-  <div class="row" style="margin-bottom: 8px;">
-    <div class="mode-toggle" role="group" aria-label="Display mode">
-      <button class="btn ghost" class:active={displayMode === "timeline"} onclick={() => (displayMode = "timeline")}>Timeline</button>
-      <button class="btn ghost" class:active={displayMode === "grid"} onclick={() => (displayMode = "grid")}>Grid</button>
-    </div>
-  </div>
-
-  {#if displayMode === "timeline"}
+  {#if mode === "timeline"}
     <!-- Timeline navigation -->
     <div class="row nav-row">
       <button class="btn ghost icon" title="Back one page" onclick={() => pan(-windowDays)}>«</button>
@@ -448,7 +531,7 @@
             </button>
           {/each}
           {#if layout.length === 0}
-            <p class="empty" style="padding: 16px;">No shifts in this range. Use “Prefill timeframe”, or add one-off shifts in the Shifts tab.</p>
+            <p class="empty" style="padding: 16px;">No shifts in this range. Use “Place shifts”, or add one-time shifts in the Shifts tab.</p>
           {/if}
         </div>
       </div>
@@ -479,19 +562,34 @@
               <tr>
                 <th class="rowhead">{p.name}</th>
                 {#each grid.days as d (d.key)}
+                  {@const inCol = drag?.dayKey === d.key}
+                  {@const st = inCol ? dropState(p.id) : null}
                   <td
                     class:away={!isPersonAvailable($appData, p.id, d.date)}
+                    class:drop-ok={st === "ok"}
+                    class:drop-warn={st === "warn"}
+                    class:drop-blocked={st === "blocked"}
+                    class:drop-hover={inCol && hoverPid === p.id}
                     title={isPersonAvailable($appData, p.id, d.date) ? undefined : `${p.name} not available`}
+                    ondragover={(e) => { if (inCol && st !== "blocked") { e.preventDefault(); hoverPid = p.id; } }}
+                    ondragleave={() => { if (hoverPid === p.id) hoverPid = null; }}
+                    ondrop={(e) => { if (inCol) { e.preventDefault(); onDropPerson(p.id); } }}
                   >
                     {#each row?.get(d.key) ?? [] as s (s.id)}
+                      {@const role = roleOf(s, p.id)}
                       <button
                         class="chip"
                         class:selected={s.id === selectedId}
+                        class:dragging={drag?.shiftId === s.id && drag?.fromPid === p.id}
                         style={chipStyle(s)}
+                        draggable={!solving}
+                        ondragstart={() => (drag = { shiftId: s.id, fromPid: p.id, dayKey: d.key })}
+                        ondragend={() => { drag = null; hoverPid = null; }}
                         onclick={() => (selectedId = s.id)}
-                        title="{s.name} {hhmm(s.start)}"
+                        title="{s.name}{role ? ` — ${role}` : ''} {hhmm(s.start)} — drag to reassign"
                       >
                         <span class="c-name">{s.name}</span>
+                        {#if role}<span class="c-role">{role}</span>{/if}
                         <span class="c-time">{hhmm(s.start)}</span>
                       </button>
                     {/each}
@@ -503,17 +601,28 @@
               <tr class="open-row">
                 <th class="rowhead">Unassigned</th>
                 {#each grid.days as d (d.key)}
-                  <td>
+                  {@const clearHere = drag?.dayKey === d.key && drag?.fromPid !== null}
+                  <td
+                    class:drop-clear={clearHere}
+                    ondragover={(e) => { if (clearHere) e.preventDefault(); }}
+                    ondrop={(e) => { if (clearHere) { e.preventDefault(); onDropUnassigned(); } }}
+                  >
                     {#each grid.open.get(d.key) ?? [] as s (s.id)}
                       {@const f = fill(s)}
+                      {@const role = roleOf(s, null)}
                       <button
                         class="chip"
                         class:selected={s.id === selectedId}
+                        class:dragging={drag?.shiftId === s.id && drag?.fromPid === null}
                         style={chipStyle(s)}
+                        draggable={!solving}
+                        ondragstart={() => (drag = { shiftId: s.id, fromPid: null, dayKey: d.key })}
+                        ondragend={() => { drag = null; hoverPid = null; }}
                         onclick={() => (selectedId = s.id)}
-                        title="{s.name} {hhmm(s.start)} — {f.filled}/{f.total} filled"
+                        title="{s.name}{role ? ` — open: ${role}` : ''} {hhmm(s.start)} — {f.filled}/{f.total} filled · drag onto a person to assign"
                       >
                         <span class="c-name">{s.name}</span>
+                        {#if role}<span class="c-role">{role}</span>{/if}
                         <span class="c-time">{hhmm(s.start)} · {f.filled}/{f.total}</span>
                       </button>
                     {/each}
@@ -568,6 +677,13 @@
         {@const remaining = $appData.attributes.filter((a) => !r.attributeIds.includes(a.id))}
         <div class="req">
           <div class="row" style="margin-bottom: 6px; flex-wrap: wrap;">
+            <input
+              type="text"
+              class="role-input"
+              placeholder="role name…"
+              value={r.label ?? ""}
+              onchange={(e) => updateRequirement(selected.id, i, { label: e.currentTarget.value.trim() || undefined })}
+            />
             <span class="muted" style="font-size: 13px;">need</span>
             <input type="number" min="1" style="width: 64px;" value={r.slots.length} onchange={(e) => setSlotCount(selected.id, i, Number(e.currentTarget.value))} />
             {#if r.attributeIds.length === 0}
@@ -679,13 +795,6 @@
   .block-title { font-size: 12px; font-weight: 600; color: var(--text-h); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .block-people { font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
 
-  /* Display-mode toggle */
-  .mode-toggle { display: inline-flex; gap: 0; }
-  .mode-toggle .btn { border-radius: 0; }
-  .mode-toggle .btn:first-child { border-radius: 6px 0 0 6px; }
-  .mode-toggle .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
-  .mode-toggle .btn.active { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent); }
-
   /* Rota grid */
   .matrix-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
   .matrix { min-width: max-content; border-collapse: collapse; }
@@ -719,4 +828,25 @@
   .chip.selected { outline: 2px solid var(--accent); }
   .chip .c-name { font-size: 12px; font-weight: 600; color: var(--text-h); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip .c-time { font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip .c-role {
+    font-size: 11px; font-weight: 600; color: var(--text-h); opacity: 0.85;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chip[draggable="true"] { cursor: grab; }
+  .chip.dragging { opacity: 0.4; }
+  .role-input { width: 120px; font-weight: 600; }
+  /* Active day-column drop feedback while a chip is being dragged: valid target
+     cells stay bright; everything you can't/shouldn't drop on is greyed out so
+     the good picks pop. (drop-warn = unavailable or unqualified — still
+     droppable as an override, but dimmed.) */
+  .matrix td.drop-ok {
+    background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+  .matrix td.drop-warn, .matrix td.drop-blocked {
+    background-color: color-mix(in srgb, var(--text) 22%, var(--bg));
+    opacity: 0.4;
+  }
+  .matrix td.drop-hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .matrix td.drop-clear { background-color: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: inset 0 0 0 1px var(--text); }
 </style>

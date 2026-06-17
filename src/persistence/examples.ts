@@ -112,7 +112,7 @@ function createArchelonData(): AppData {
     time: string, // "HH:MM" on the June 1, 2027 anchor
     durationMinutes: number,
     frequencyDays: number,
-    slots: Array<{ attrs: AttrName[]; count: number; required?: boolean }>,
+    slots: Array<{ attrs: AttrName[]; count: number; required?: boolean; label?: string }>,
     breakMinutes = 0,
     anchorDate = "2027-05-01", // anchor for daily shifts; weekly shifts pass their own
   ) => {
@@ -126,10 +126,11 @@ function createArchelonData(): AppData {
       breakMinutes,
       activationDateTime: `${anchorDate}T${time}:00`,
       frequency: { value: frequencyDays, unit: "days" },
-      requirements: slots.map(({ attrs, count, required }) => ({
+      requirements: slots.map(({ attrs, count, required, label }) => ({
         attributeIds: attrs.map((a) => attrId[a]),
         count,
         required: required ?? false,
+        label,
       })),
     });
   };
@@ -145,13 +146,13 @@ function createArchelonData(): AppData {
   // 1 required anyone, 1 optional anyone.
   for (const team of ["A", "B", "C"]) {
     addTemplate(`Morning Survey ${team}`, CONSERVATION, "05:00", 240, 1, [
-      { attrs: ["MS leader"], count: 1, required: true },
-      { attrs: [], count: 1, required: true },
-      { attrs: [], count: 1 },
+      { attrs: ["MS leader"], count: 1, required: true, label: "MS leader" },
+      { attrs: [], count: 1, required: true, label: "surveyor" },
+      { attrs: [], count: 1, label: "surveyor" },
     ], 120);
   }
-  addTemplate("MS Driver", CAMP, "05:00", 180, 1, [{ attrs: ["driver"], count: 1, required: true }], 180);
-  addTemplate("Cooking", CAMP, "14:00", 120, 1, [{ attrs: [], count: 2 }]);
+  addTemplate("MS Driver", CAMP, "05:00", 180, 1, [{ attrs: ["driver"], count: 1, required: true, label: "driver" }], 180);
+  addTemplate("Cooking", CAMP, "14:00", 120, 1, [{ attrs: [], count: 2, label: "cook" }]);
   // Kiosk shifts abut (08–11, 11–14, 14–17); the 1h break makes back-to-back
   // kiosk for the same person cost an hour of violated break time.
   addTemplate("Kiosk 1", PA, "08:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
@@ -167,13 +168,13 @@ function createArchelonData(): AppData {
   const presentationAnchors = ["2027-06-07", "2027-06-07", "2027-06-01", "2027-06-02", "2027-06-03"];
   presentationAnchors.forEach((anchorDate, idx) => {
     addTemplate(`Presentation ${idx + 1}`, PA, "19:00", 240, 7, [
-      { attrs: ["presenter"], count: 1, required: true },
-      { attrs: [], count: 2 },
+      { attrs: ["presenter"], count: 1, required: true, label: "presenter" },
+      { attrs: [], count: 2, label: "helper" },
     ], 480, anchorDate);
   });
   addTemplate("Grocery shop", CAMP, "10:00", 120, 7, [
-    { attrs: ["driver"], count: 1, required: true },
-    { attrs: [], count: 1 },
+    { attrs: ["driver"], count: 1, required: true, label: "driver" },
+    { attrs: [], count: 1, label: "helper" },
   ], 0, "2027-06-01");
 
   return AppDataSchema.parse({
