@@ -12,6 +12,7 @@ import { writable, get } from "svelte/store";
 import { AppDataSchema, emptyAppData } from "./schema";
 import type { AppData } from "./types";
 import { migrate } from "../persistence/migrate";
+import { resetHistory } from "./history";
 
 const STORAGE_KEY = "rotatool:appdata";
 
@@ -51,11 +52,13 @@ export function getAppData(): AppData {
 /** Replace the entire dataset, e.g. after importing a workbook. */
 export function replaceAppData(data: AppData): void {
   appData.set(data);
+  resetHistory(); // a different dataset is a fresh start; can't undo across it
 }
 
 /** Wipe back to an empty dataset. */
 export function resetAppData(): void {
   appData.set(emptyAppData());
+  resetHistory();
 }
 
 /** Generate a fresh internal entity id. */

@@ -8,6 +8,7 @@
  */
 
 import { appData, newId } from "./store";
+import { recordCommit } from "./history";
 import { DEFAULT_SHIFT_TYPE_ID, SHIFT_TYPE_COLORS } from "./schema";
 import type { AppData, Person, Attribute, ShiftType, ShiftTemplate, ShiftRequirement, TemplateRequirement } from "./types";
 
@@ -28,6 +29,7 @@ export function mutate(fn: (data: AppData) => void): void {
   appData.update((data) => {
     const next = structuredClone(data);
     fn(next);
+    recordCommit(data, next);
     return next;
   });
 }

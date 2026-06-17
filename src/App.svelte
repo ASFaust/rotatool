@@ -1,5 +1,6 @@
 <script lang="ts">
   import { appData, replaceAppData, resetAppData } from "./model/store";
+  import { undo, redo, canUndo, canRedo } from "./model/history";
   import {
     importWorkbook,
     exportWorkbook,
@@ -133,6 +134,25 @@
     URL.revokeObjectURL(url);
     status = "Saved rotatool.json.";
   }
+
+  // Global undo/redo shortcuts. We let a focused text field keep its native
+  // edit-undo (edits only commit to the store on blur/change, so per-keystroke
+  // history would be wrong anyway), and stay inert while a solve is locked.
+  function onKeydown(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || solving) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    const key = e.key.toLowerCase();
+    const wantRedo = (key === "z" && e.shiftKey) || key === "y";
+    const wantUndo = key === "z" && !e.shiftKey;
+    if (wantRedo && $canRedo) {
+      e.preventDefault();
+      redo();
+    } else if (wantUndo && $canUndo) {
+      e.preventDefault();
+      undo();
+    }
+  }
 </script>
 
 <header class="topbar">
@@ -160,6 +180,8 @@
     <span class="muted">client-side rota generator</span>
   </div>
   <div class="actions">
+    <button class="btn ghost" onclick={undo} disabled={!$canUndo || solving} title="Undo (Ctrl+Z)" aria-label="Undo">↶ Undo</button>
+    <button class="btn ghost" onclick={redo} disabled={!$canRedo || solving} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷ Redo</button>
     <button class="btn ghost" onclick={() => fileInput.click()} disabled={solving}>Import .json…</button>
     <button class="btn ghost" onclick={saveWorkbook}>Save .json</button>
     <div class="menu-wrap">
@@ -189,7 +211,7 @@
   </div>
 </header>
 
-<svelte:window onclick={() => (examplesOpen = false)} />
+<svelte:window onclick={() => (examplesOpen = false)} onkeydown={onKeydown} />
 
 <nav class="tabs">
   {#each tabs as t}
