@@ -139,8 +139,6 @@ noted):
 - **GitHub link on the Overview page** — link out to the project repo.
 - **Move the dark-mode toggle to the right**, alongside the other action buttons
   (Undo/Redo/Import/Save/…), instead of in the brand area on the left.
-- **Turtle (🐢) as the site icon** — use it for the favicon (`public/favicon.svg`,
-  referenced from `index.html`).
 - **Drop "client-side rota generator" from the header** — remove that subtitle
   next to the Rotatool brand.
 
