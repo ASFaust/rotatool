@@ -32,8 +32,9 @@ export interface ExampleTemplate {
  * generic seats are slots with no attributes, which anyone can fill.
  *
  * Workload is dynamic (demand / people-on-site varies through June), so the
- * fairness objective is enabled and hours/week targets act as relative load
- * shares: everyone (leaders included) carries the same 20h/wk target.
+ * fairness objective is enabled. Everyone (leaders included) carries the same
+ * 20h/wk target, which sets each person's expected hours; fairness balances how
+ * close everyone is to their own pace (utilization).
  */
 function createArchelonData(): AppData {
   const ATTRIBUTE_NAMES = [
@@ -186,13 +187,13 @@ function createArchelonData(): AppData {
     shiftTypes,
     shiftTemplates,
     // Workload is dynamic through June, so enable the fairness objective: the
-    // 20h/week targets act as relative load shares (see the docstring above).
+    // 20h/week targets set each person's expected hours (see the docstring above).
     solverSettings: {
       solveTimeLimitSeconds: 120,
       coverage: { enabled: true, weight: 1 },
       breaks: { enabled: true, weight: 1 },
       peakWindow: { enabled: true, weight: 1, windowHours: 36 },
-      fairness: { enabled: true, weight: 1, mode: "spread", perShiftType: true },
+      fairness: { enabled: true, weight: 1, mode: "L1", perShiftType: true, maxCatchUpHours: 40 },
     },
     // Open the Ledger on the first week (May 31 – June 6, 2027).
     ledgerView: { from: "2027-05-31", to: "2027-06-06" },

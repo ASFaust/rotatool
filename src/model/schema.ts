@@ -24,7 +24,7 @@
 import { z } from "zod";
 
 /** Bumped whenever the persisted shape changes. */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** Non-empty identifier string (internal id or a name reference). */
 const id = z.string().min(1);
@@ -256,25 +256,33 @@ export const SolverSettingsSchema = z.object({
     windowHours: 24,
   }),
   /**
-   * Balance each person's *contribution rate over their tenure*: measure hours
-   * (already-worked + newly-assigned) per unit of time the person has been
-   * present, scaled by their workload target read as a *relative weight*, and
-   * even those rates out. So a longer-tenured person is expected to have done
-   * proportionally more, and a half-weight part-timer about half — and only the
-   * ratios between targets matter, not the absolute hours entered (a blank target
-   * means a full share). `mode` picks the shape: "deviation" pulls the whole
-   * roster toward a shared rate (L1); "spread" only squeezes the gap between the
-   * busiest and idlest.
+   * Balance workload by *utilization* (hours worked ÷ expected hours over the
+   * person's availability-aware tenure). A history-aware pre-pass turns each
+   * person's pace into a target number of hours to newly assign this window, then
+   * the solver penalizes deviation from that target — `weight` is the penalty per
+   * hour off target. `mode` picks the shape: "L1" pulls everyone toward their own
+   * target; "min-max" shrinks only the single worst deviation.
+   *
+   * `maxCatchUpHours` caps how many catch-up hours a behind person can be handed
+   * in one window (the ramp knob) — so a season's backlog isn't dumped at once.
    *
    * `perShiftType` runs the balancing once per shift type instead of over total
    * hours — so e.g. nobody ends up doing all the cooking while another does all
    * the kiosk shifts, even if their totals match.
+   *
+   * People missing a start date or a positive weekly target are excluded (and
+   * listed in a warning), replacing the old blank-target fallbacks.
    */
-  fairness: Term.extend({ mode: z.enum(["spread", "deviation"]), perShiftType: z.boolean() }).default({
+  fairness: Term.extend({
+    mode: z.enum(["L1", "min-max"]),
+    perShiftType: z.boolean(),
+    maxCatchUpHours: z.number().nonnegative(),
+  }).default({
     enabled: false,
     weight: 1,
-    mode: "deviation",
+    mode: "L1",
     perShiftType: false,
+    maxCatchUpHours: 40,
   }),
 });
 

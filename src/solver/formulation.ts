@@ -27,7 +27,8 @@
 import { LpBuilder } from "./builder";
 import type { HighsLikeSolution, LpStats } from "./builder";
 import { isPersonAvailable } from "../model/ledger";
-import { computeDerivedHours, weeklyHours, personStartDate, availableWeeks } from "../model/hours";
+import { computeUtilization } from "../model/hours";
+import type { PersonUtilization } from "../model/hours";
 import type { AppData, Shift } from "../model/types";
 
 /** A chosen (or candidate) placement of a person into one empty slot. */
@@ -319,153 +320,116 @@ export function buildAssignmentModel(
     }
   }
 
-  // Fairness: even out each person's *contribution rate over their tenure*. The
-  // fair quantity is hours done per unit of time present, scaled by a relative
-  // participation weight — so someone who has been around twice as long is
-  // expected to have done about twice the work, and a half-weight part-timer
-  // about half. Each person's ratio is:
+  // Fairness: steer each person toward a precomputed, per-person *target number
+  // of hours to newly assign* this window, then penalize deviation from it. All
+  // the history reasoning lives in a plain pre-pass (computeUtilization); the LP
+  // only sees fixed target constants, so — unlike the old shared-ratio term — the
+  // per-person aux vars are fully decoupled and the relaxation stays tight.
   //
-  //   ratio_p = (e_p + Σ durHours_s · x[s,p]) / (weight_p · present_p)
+  // Per eligible person p and scope (total, or one shift type):
+  //   denom_p   = availableWeeks(start_p → rangeEnd) × weeklyHours_p   (expected hrs)
+  //   worked_p  = seed + ledger-derived hours through rangeEnd (incl. already-filled
+  //               in-window slots — so the new-hours target below isn't double-counted)
+  //   T         = (Σ_elig worked + pool) / Σ_elig denom   ← post-distribution equal
+  //               utilization: the center at which Σ targets = pool, so the targets
+  //               *distribute* the open seats instead of fighting coverage
+  //   Δ_p       = T · denom_p − worked_p                  ← hours to reach the target
+  //   target_p  = clamp(Δ_p, 0, min(maxCatchUp, assignable_p))
   //
-  // where e_p = hours already worked (seeded `personHours` + hours derived from
-  // filled ledger slots; newly-solved seats are still null there, so assigned-now
-  // isn't double-counted), present_p = the weeks the person was effectively
-  // available from their start through the window end (availability-aware, so
-  // leave doesn't accrue expected time) divided by a reference tenure so the
-  // term's scale (and the meaning of `fairness.weight`) stays stable, and
-  // weight_p = their workload target read as a *relative* weight. This is
-  // scale-invariant in weight: only the ratios between people matter, never the
-  // absolute hours entered. People who left their target blank take a full share
-  // (the largest entered target, so blank = full-timer); if nobody set one,
-  // everyone is equal-weighted.
+  // The clamp's lower 0 is the add-only floor (we can only fill empty seats, never
+  // remove worked hours, so over-utilized people get target 0 → "assign nothing");
+  // its upper bound caps catch-up per window (the ramp knob) and never exceeds the
+  // hours p can physically be given in-window (assignable_p), so an unreachable
+  // target can't inject a constant penalty. Deviation is in *hours* now, so
+  // `fairness.weight` reads as "penalty per hour off target".
   //
-  // (Businesses that want absolute contracted-hours targets instead of this
-  // relative/tenure rule would add a new fairness mode here — same field, a
-  // different objective — but that's intentionally not built yet.)
-  //
-  // Only people with a positive denominator carry a ratio (a person with no
-  // available time in the span can't be assigned anyway). The term is built only
-  // with ≥2 such people (fairness is meaningless below that, and it keeps every
-  // aux var in ≥2 constraints — clear of the column-singleton presolve trap, see
-  // builder.ts).
+  // People missing a start date or a positive weekly target are ineligible (no
+  // denom) and silently excluded here — the UI lists them in a warning. The term
+  // is built per scope only with ≥2 people carrying decision hours (meaningless
+  // below that; also keeps every aux var in ≥2 constraints, clear of the
+  // column-singleton presolve trap — see builder.ts).
   const fairness = data.solverSettings.fairness;
   if (fairness.enabled && fairness.weight > 0) {
-    // Already-worked hours per person (seed + derived from filled slots), kept
-    // both as a grand total and split per shift type for `perShiftType` mode.
-    const existingTotal = new Map<string, number>();
-    const existingByType = new Map<string, Map<string, number>>(); // typeId -> personId -> hours
-    const bump = (map: Map<string, number>, pid: string, h: number) => map.set(pid, (map.get(pid) ?? 0) + h);
-    const typeBucket = (typeId: string) =>
-      existingByType.get(typeId) ?? existingByType.set(typeId, new Map()).get(typeId)!;
-    for (const ph of data.personHours) {
-      bump(existingTotal, ph.personId, ph.hours);
-      bump(typeBucket(ph.typeId), ph.personId, ph.hours);
-    }
-    for (const [pid, byType] of computeDerivedHours(data, rangeEnd))
-      for (const [typeId, h] of byType) {
-        bump(existingTotal, pid, h);
-        bump(typeBucket(typeId), pid, h);
-      }
+    const util = computeUtilization(data, rangeEnd);
+    const eligible = [...util.values()].filter((u) => u.eligible);
+    const sumDenom = eligible.reduce((s, u) => s + u.denom, 0);
 
-    // shiftId -> typeId, to group candidate seats by shift type.
+    // shiftId -> typeId, to group candidate seats and pool by shift type.
     const typeByShift = new Map<string, string>();
     for (const s of allShifts) typeByShift.set(s.id, s.typeId);
 
-    // Per-person fairness denominator = relative weight · normalized tenure. The
-    // weight is the entered weekly target read as a pure ratio; a blank target
-    // takes a full share (the largest entered target, so blank = full-timer), and
-    // if nobody set one everyone is weighted 1. Tenure is availability-aware weeks
-    // from the person's start (or the window start, if they have no availability
-    // on record) through the window end. Only people with some time present carry
-    // a ratio.
-    let maxRate = 0;
-    for (const p of data.persons) {
-      const r = weeklyHours(p);
-      if (r && r > maxRate) maxRate = r;
-    }
-    const defaultWeight = maxRate > 0 ? maxRate : 1;
-
-    // First pass: each candidate's relative weight and weeks present.
-    const wp = new Map<string, { weight: number; present: number }>();
-    for (const [personId] of seatVarsByPerson) {
-      const p = data.persons.find((q) => q.id === personId);
-      if (!p) continue;
-      const r = weeklyHours(p);
-      const weight = r && r > 0 ? r : defaultWeight;
-      const start = personStartDate(data, personId) ?? rangeStart;
-      const present = availableWeeks(data, personId, start, rangeEnd);
-      if (weight > 0 && present > 0) wp.set(personId, { weight, present });
+    // Pool = open seat-hours available to distribute, per type and overall. (A
+    // slight overcount when ineligible people also take seats — acceptable; the
+    // clamps bound the effect, and it only nudges the center.)
+    const poolByType = new Map<string, number>();
+    let poolTotal = 0;
+    for (const seat of seats) {
+      const durHours = (seat.end - seat.start) / 3_600_000;
+      const t = typeByShift.get(seat.shiftId);
+      if (t) poolByType.set(t, (poolByType.get(t) ?? 0) + durHours);
+      poolTotal += durHours;
     }
 
-    // Reference tenure = the median weeks-present. Dividing every person's tenure
-    // by it keeps the term's magnitude — and so the meaning of `fairness.weight` —
-    // independent of how long people have been around or how wide the date range
-    // is. Without it, ratios shrink ~1/tenure and the weight silently loses bite.
-    // It's one global divisor, so all ratios scale together: relative fairness is
-    // unchanged, only the overall scale is fixed. For the median person tenure
-    // normalizes to 1, so denom = weight and the term matches the pre-tenure scale.
-    const presents = [...wp.values()].map((x) => x.present).sort((a, b) => a - b);
-    const refWeeks = presents.length ? presents[Math.floor((presents.length - 1) / 2)] || 1 : 1;
+    const w = fairness.weight;
+    const cap = fairness.maxCatchUpHours;
+    const neg = (t: [string, number]): [string, number] => [t[0], -t[1]];
 
-    const denomByPerson = new Map<string, number>();
-    for (const [personId, { weight, present }] of wp)
-      denomByPerson.set(personId, weight * (present / refWeeks));
+    // Balance one scope. `pool` is the scope's distributable seat-hours; `workedOf`
+    // reads the scope's already-worked hours from a person's utilization; `seatIn`
+    // selects which candidate seats count toward the scope's assigned-hours expr.
+    const addFairness = (
+      pool: number,
+      workedOf: (u: PersonUtilization) => number,
+      seatIn: (sv: SeatVar) => boolean,
+    ) => {
+      if (!(sumDenom > 0)) return;
+      const T = (eligible.reduce((s, u) => s + workedOf(u), 0) + pool) / sumDenom;
 
-    // Balance one scope: every person with a denominator carries a ratio =
-    // (already-worked + assigned-now hours in this scope) / denom_p. `seatFilter`
-    // restricts the assigned-now seats counted; `existing` supplies the matching
-    // already-worked hours. Run once globally, or once per shift type. People with
-    // neither prior hours nor a candidate seat here are skipped.
-    const addFairness = (existing: Map<string, number>, seatFilter: (sv: SeatVar) => boolean) => {
-      interface RatioPerson { c: number; terms: [string, number][]; max: number }
-      const people: RatioPerson[] = [];
-      for (const [personId, segs] of seatVarsByPerson) {
-        const denom = denomByPerson.get(personId);
-        if (denom === undefined) continue;
-        const c = (existing.get(personId) ?? 0) / denom;
+      interface DevPerson { terms: [string, number][]; target: number; assignable: number }
+      const people: DevPerson[] = [];
+      for (const u of eligible) {
+        const segs = seatVarsByPerson.get(u.personId);
+        if (!segs) continue;
         const terms: [string, number][] = [];
         let assignable = 0;
         for (const s of segs) {
-          if (!seatFilter(s)) continue;
+          if (!seatIn(s)) continue;
           const durHours = (s.end - s.start) / 3_600_000;
-          terms.push([s.v, durHours / denom]);
-          assignable += durHours / denom;
+          terms.push([s.v, durHours]);
+          assignable += durHours;
         }
-        if (c === 0 && terms.length === 0) continue; // nothing in this scope
-        people.push({ c, terms, max: c + assignable });
+        if (terms.length === 0) continue; // no decision hours here → nothing to steer
+        const delta = T * u.denom - workedOf(u);
+        const target = Math.max(0, Math.min(delta, cap, assignable));
+        people.push({ terms, target, assignable });
       }
-
       if (people.length < 2) return;
-      const w = fairness.weight;
-      const ratioUb = Math.max(...people.map((p) => p.max));
-      if (fairness.mode === "deviation") {
-        // L1: pull every ratio toward a free shared reference R; penalize Σ dev_p.
-        //   dev_p ≥ ratio_p − R   and   dev_p ≥ R − ratio_p
-        const R = b.addContinuous(0, ratioUb);
+
+      if (fairness.mode === "L1") {
+        // Independent fixed targets: penalize Σ_p |assigned_p − target_p|.
+        //   dev_p ≥ assigned_p − target_p   and   dev_p ≥ target_p − assigned_p
         for (const p of people) {
-          const dev = b.addContinuous(0, ratioUb);
-          b.addConstraint([...p.terms, [R, -1], [dev, -1]], "<=", -p.c, "fairness");
-          b.addConstraint([...p.terms.map((t): [string, number] => [t[0], -t[1]]), [R, 1], [dev, -1]], "<=", p.c, "fairness");
+          const dev = b.addContinuous(0, p.assignable);
+          b.addConstraint([...p.terms, [dev, -1]], "<=", p.target, "fairness");
+          b.addConstraint([...p.terms.map(neg), [dev, -1]], "<=", -p.target, "fairness");
           penalties.push([dev, -w]);
         }
       } else {
-        // Min-max: penalize (max ratio − min ratio); the solver drives M to the
-        // busiest ratio and m to the idlest, shrinking the gap between them.
-        const M = b.addContinuous(0, ratioUb);
-        const m = b.addContinuous(0, ratioUb);
+        // Min-max: shrink the single worst |assigned_p − target_p| across people.
+        const M = b.addContinuous(0, Math.max(...people.map((p) => p.assignable)));
         for (const p of people) {
-          b.addConstraint([...p.terms, [M, -1]], "<=", -p.c, "fairness"); // M ≥ ratio_p
-          b.addConstraint([...p.terms.map((t): [string, number] => [t[0], -t[1]]), [m, 1]], "<=", p.c, "fairness"); // m ≤ ratio_p
+          b.addConstraint([...p.terms, [M, -1]], "<=", p.target, "fairness");
+          b.addConstraint([...p.terms.map(neg), [M, -1]], "<=", -p.target, "fairness");
         }
-        penalties.push([M, -w], [m, w]);
+        penalties.push([M, -w]);
       }
     };
 
     if (fairness.perShiftType) {
       for (const st of data.shiftTypes)
-        addFairness(existingByType.get(st.id) ?? new Map(), (sv) => typeByShift.get(sv.shiftId) === st.id);
+        addFairness(poolByType.get(st.id) ?? 0, (u) => u.workedByType.get(st.id) ?? 0, (sv) => typeByShift.get(sv.shiftId) === st.id);
     } else {
-      addFairness(existingTotal, () => true);
+      addFairness(poolTotal, (u) => u.workedTotal, () => true);
     }
   }
 

@@ -87,6 +87,7 @@
   ] as const);
 
   function loadExample(example: ExampleTemplate) {
+    if (!confirm(`Discard the current dataset and load "${example.name}"?`)) return;
     replaceAppData(example.create());
     importErrors = [];
     status = `Loaded example "${example.name}".`;
@@ -523,7 +524,7 @@
     padding: 0;
     margin: 8px 0 0;
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: 4px 24px;
   }
   .summary li {

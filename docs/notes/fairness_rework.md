@@ -1,7 +1,7 @@
 # Fairness objective rework — history-aware targets
 
-Status: **planned, tabled 2026-06-17.** Captures the design conclusions from the
-design chat. Not yet implemented.
+Status: **implemented 2026-06-17.** The design below stands; the resolved open
+decisions and the as-built shape are recorded in "Resolution" at the bottom.
 
 ## Motivation
 
@@ -133,3 +133,31 @@ using `ledgerView.to` as the common horizon. Keep the seed input + autofill
   first (per-type diagnostic regardless).
 - Exact handling of already-assigned in-window hours (subtlety 1) in the
   deviation expression.
+
+## Resolution (as built, 2026-06-17)
+
+Knobs: `mode: "L1" | "min-max"`, `perShiftType`, `maxCatchUpHours` (the ramp
+cap), plus `enabled`/`weight`. Migration v7→v8 maps `deviation→L1`, `spread→min-max`,
+backfills `maxCatchUpHours: 40`.
+
+- **Subtlety 1:** no explicit subtraction. `worked_p` is measured through
+  `rangeEnd` (`computeUtilization` → `computeDerivedHours(data, rangeEnd)`), which
+  already includes filled in-window slots; decision vars cover only *empty* seats,
+  so the new-hours target is just `Δ_p = T·denom_p − worked_p` with no double-count.
+- **Subtlety 2:** `denom_p = availableWeeks(start_p → rangeEnd) × weeklyHours_p`.
+- **Subtlety 3:** `target_p = clamp(Δ_p, 0, min(maxCatchUpHours, assignable_p))`,
+  `assignable_p` = Σ candidate-seat hours in scope (from `seatVarsByPerson`).
+- **Subtlety 4:** chose **post-distribution equal utilization** as the center,
+  `T = (Σ_elig worked + pool) / Σ_elig denom`; `pool` = open in-scope seat-hours.
+  Dropped the mean/median toggle. (`pool` slightly overcounts when ineligible
+  people also take seats — accepted; clamps bound it.)
+- **`maxLess` dropped:** in an add-only solver you can never push an over-utilized
+  person below current hours; the floor-at-0 on new-assigned does that. So only the
+  catch-up cap (`maxMore`) is meaningful — one knob, not two.
+- **Decoupling (the LP fix):** targets are absolute per-person constants, so L1
+  needs no shared `R` and min-max no shared `M`/`m`; each person's aux var is
+  independent. Deviation is in **hours**, so `weight` = penalty per hour off target.
+
+Per-type balancing **is** in the first cut (`perShiftType`). The Person Hours tab
+gained a read-only **Pace** column (`U_p`, per-type in the tooltip) plus a cohort
+pace footer; `SolverSettingsView` lists fairness-excluded active people.

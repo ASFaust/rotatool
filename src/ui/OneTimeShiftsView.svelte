@@ -43,11 +43,11 @@
 <div class="view">
   <h2>One-time shifts</h2>
   <p class="hint">
-    One-time shifts are concrete shifts that happen once. Add <em>people slots</em> ("need N people
-    who are X and Y") to define staffing — no attributes means anyone qualifies, and <em>required</em>
-    slots are flagged when they can't be filled. <em>Importance</em> weights how much filling this
-    shift matters. A <em>break</em> reserves rest afterwards (soft — see the Solver tab). Assign
-    people in the Rota.
+    One-time shifts are concrete shifts that happen once. Add <em>roles</em> ("need N people
+    who are X and Y") to define staffing — give each a name (optional) to label it on the grid;
+    no attributes means anyone qualifies, and <em>required</em> roles are flagged when they can't
+    be filled. <em>Importance</em> weights how much filling this shift matters. A <em>break</em>
+    reserves rest afterwards (soft — see the Solver tab). Assign people in the Rota.
   </p>
 
   <div class="row" style="margin-bottom: 20px;">
@@ -91,10 +91,11 @@
       </div>
 
       <div class="field">
-        <span class="cap">Staffing — people slots (assign people in the Rota)</span>
+        <span class="cap">Staffing — roles (assign people in the Rota)</span>
         {#each shift.requirements as r, i (i)}
           {@const remaining = $appData.attributes.filter((a) => !r.attributeIds.includes(a.id))}
           <div class="row" style="margin-bottom: 4px; flex-wrap: wrap;">
+            <input style="width: 150px;" placeholder="Role name (optional)" value={r.label ?? ""} onchange={(e) => updateRequirement(shift.id, i, { label: e.currentTarget.value.trim() || undefined })} />
             <span class="muted" style="font-size: 13px;">need</span>
             <input type="number" min="1" style="width: 64px;" value={r.slots.length} onchange={(e) => setSlotCount(shift.id, i, Number(e.currentTarget.value))} />
             {#if r.attributeIds.length === 0}
@@ -117,7 +118,7 @@
             <button class="btn danger icon" onclick={() => removeRequirement(shift.id, i)}>×</button>
           </div>
         {/each}
-        <div><button class="btn ghost icon" onclick={() => addRequirement(shift.id)}>+ people slot</button></div>
+        <div><button class="btn ghost icon" onclick={() => addRequirement(shift.id)}>+ role</button></div>
       </div>
     </div>
   {/each}

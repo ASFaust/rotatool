@@ -17,6 +17,7 @@
     reconcileAvailability,
     isPersonAvailable,
   } from "../model/ledger";
+  import { personStartDate } from "../model/hours";
   import { setLedgerView } from "../model/mutations";
   import { formatDateTime } from "../util/dates";
   import { solverRun, runAssign } from "../solver/solverLog";
@@ -58,6 +59,9 @@
   // zoom: 0 = whole window fills the width, 100 = a single day fills the width.
   let zoom = $state(0);
   let selectedId = $state<string | null>(null);
+  // Person whose chip is selected (a specific assigned slot), so Del can unassign
+  // them. null when the selection is a shift-level chip (open row / timeline).
+  let selectedPid = $state<string | null>(null);
   let status = $state("");
   // The solve run lives in a shared store so it survives this tab unmounting
   // (the solver keeps going while you browse). `solving` also locks editing.
@@ -240,6 +244,41 @@
   let drag = $state<DragPayload | null>(null);
   let hoverPid = $state<string | null>(null); // person row currently hovered
 
+  /** Day (yyyy-mm-dd) of the shift being dragged — other day columns grey out. */
+  const dragDayKey = $derived.by(() => {
+    if (!drag) return null;
+    const s = $appData.shifts.find((x) => x.id === drag!.shiftId);
+    return s ? s.start.slice(0, 10) : null;
+  });
+
+  // Native HTML5 drag suppresses normal scrolling, so we auto-scroll when the
+  // pointer nears a viewport edge: the window vertically, the grid horizontally.
+  let matrixScrollEl = $state<HTMLDivElement | null>(null);
+  let dragX = 0, dragY = 0;
+  let autoScrollRAF = 0;
+
+  function autoScrollTick() {
+    if (!drag) { autoScrollRAF = 0; return; }
+    const margin = 72, maxSpeed = 22;
+    const edge = (pos: number, lo: number, hi: number) =>
+      pos < lo + margin ? -Math.ceil(((lo + margin - pos) / margin) * maxSpeed)
+      : pos > hi - margin ? Math.ceil(((pos - (hi - margin)) / margin) * maxSpeed)
+      : 0;
+    const dy = edge(dragY, 0, window.innerHeight);
+    if (dy) window.scrollBy(0, dy);
+    if (matrixScrollEl) {
+      const r = matrixScrollEl.getBoundingClientRect();
+      const dx = edge(dragX, r.left, r.right);
+      if (dx) matrixScrollEl.scrollLeft += dx;
+    }
+    autoScrollRAF = requestAnimationFrame(autoScrollTick);
+  }
+  function onDragMove(e: DragEvent) {
+    if (!drag) return;
+    dragX = e.clientX; dragY = e.clientY;
+    if (!autoScrollRAF) autoScrollRAF = requestAnimationFrame(autoScrollTick);
+  }
+
   function findSlot(s: Shift, pid: string): { ri: number; si: number } | null {
     for (let ri = 0; ri < s.requirements.length; ri++) {
       const si = s.requirements[ri].slots.indexOf(pid);
@@ -310,8 +349,28 @@
   // their group nearest the source. Dragging from Unassigned (no source row in
   // the list) keeps the person set intact and floats eligible rows to the
   // bottom, next to the Unassigned row. FLIP animates the shuffle smoothly.
-  const orderedPersons = $derived.by(() => {
+  // Default row order: by each person's start date (earliest available interval),
+  // so the longest-tenured people are at the top. People without a start date
+  // sink to the bottom, keeping their stored order.
+  const sortedPersons = $derived.by(() => {
     const persons = $appData.persons;
+    const started = new Map<string, number>();
+    for (const p of persons) {
+      const d = personStartDate($appData, p.id);
+      if (d) started.set(p.id, d.getTime());
+    }
+    return persons
+      .map((p, i) => ({ p, i }))
+      .sort((a, b) => {
+        const ea = started.get(a.p.id), eb = started.get(b.p.id);
+        if (ea === undefined || eb === undefined) return (ea ? 0 : 1) - (eb ? 0 : 1) || a.i - b.i;
+        return ea === eb ? a.i - b.i : ea - eb;
+      })
+      .map((x) => x.p);
+  });
+
+  const orderedPersons = $derived.by(() => {
+    const persons = sortedPersons;
     if (!drag) return persons;
     const good = (p: (typeof persons)[number]) => canDropPerson(p.id);
     if (drag.fromPid === null) {
@@ -345,6 +404,30 @@
     }
     drag = null;
     hoverPid = null;
+  }
+
+  // Clicking the background — anywhere that isn't a chip, a timeline block, or
+  // the detail panel — clears the selection.
+  function onBackgroundClick(e: MouseEvent) {
+    const t = e.target as HTMLElement | null;
+    if (t?.closest(".chip, .block, .card")) return;
+    selectedId = null;
+    selectedPid = null;
+  }
+
+  // Del / Backspace with a person's chip selected unassigns them from that shift.
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (!selectedId || !selectedPid) return;
+    const s = $appData.shifts.find((x) => x.id === selectedId);
+    const at = s && findSlot(s, selectedPid);
+    if (s && at) {
+      e.preventDefault();
+      assignSlot(s.id, at.ri, at.si, null);
+      selectedPid = null;
+    }
   }
 
   // --- fill state -----------------------------------------------------------
@@ -454,6 +537,8 @@
   }
 </script>
 
+<svelte:window ondragover={onDragMove} onkeydown={onKeyDown} onclick={onBackgroundClick} />
+
 <div class="view wide">
   <h2>Ledger</h2>
   <p class="hint">
@@ -553,7 +638,7 @@
               class="block {fillClass(b.shift)}"
               class:selected={b.shift.id === selectedId}
               style="left: {b.left}px; width: {b.width}px; top: {b.lane * LANE_H}px;"
-              onclick={() => (selectedId = b.shift.id)}
+              onclick={() => { selectedId = b.shift.id; selectedPid = null; }}
               title={b.shift.name}
             >
               <span class="block-title">{b.shift.name}</span>
@@ -573,7 +658,7 @@
     {:else if grid.days.length === 0}
       <p class="empty">Empty range — pick a date range above.</p>
     {:else}
-      <div class="matrix-scroll">
+      <div class="matrix-scroll" bind:this={matrixScrollEl}>
         <table class="data matrix">
           <thead>
             <tr>
@@ -592,33 +677,35 @@
               {@const droppable = !!drag && canDropPerson(p.id)}
               {@const assignable = !!drag && canAssignPerson(p.id)}
               {@const hovered = hoverPid === p.id}
+              {@const rowDim = !!drag && !droppable}
               <tr
                 animate:flip={{ duration: 180 }}
-                class:droppable
                 class:drop-hover={droppable && hovered}
                 class:drop-hover-warn={assignable && !droppable && hovered}
                 ondragover={(e) => { if (assignable) { e.preventDefault(); hoverPid = p.id; } }}
                 ondragleave={() => { if (hovered) hoverPid = null; }}
                 ondrop={(e) => { if (assignable) { e.preventDefault(); onDropPerson(p.id); } }}
               >
-                <th class="rowhead">{p.name}</th>
+                <th class="rowhead" class:dim={rowDim}>{p.name}</th>
                 {#each grid.days as d (d.key)}
                   <td
                     class:away={!isPersonAvailable($appData, p.id, d.date)}
+                    class:dim={!!drag && (rowDim || d.key !== dragDayKey)}
                     title={isPersonAvailable($appData, p.id, d.date) ? undefined : `${p.name} not available`}
                   >
                     {#each row?.get(d.key) ?? [] as s (s.id)}
                       {@const role = roleOf(s, p.id)}
                       <button
                         class="chip"
-                        class:selected={s.id === selectedId}
+                        class:shift-active={s.id === selectedId}
+                        class:selected={s.id === selectedId && selectedPid === p.id}
                         class:dragging={drag?.shiftId === s.id && drag?.fromPid === p.id}
                         style={chipStyle(s)}
                         draggable={!solving}
                         ondragstart={() => (drag = { shiftId: s.id, fromPid: p.id })}
                         ondragend={() => { drag = null; hoverPid = null; }}
-                        onclick={() => (selectedId = s.id)}
-                        title="{s.name}{role ? ` — ${role}` : ''} {hhmm(s.start)} — drag to reassign"
+                        onclick={() => { selectedId = s.id; selectedPid = p.id; }}
+                        title="{s.name}{role ? ` — ${role}` : ''} {hhmm(s.start)} — drag to reassign · Del to unassign"
                       >
                         <span class="c-name">{s.name}</span>
                         {#if role}<span class="c-role">{role}</span>{/if}
@@ -640,19 +727,20 @@
               >
                 <th class="rowhead">Unassigned</th>
                 {#each grid.days as d (d.key)}
-                  <td>
+                  <td class:dim={!!drag && d.key !== dragDayKey}>
                     {#each grid.open.get(d.key) ?? [] as s (s.id)}
                       {@const f = fill(s)}
                       {@const role = roleOf(s, null)}
                       <button
                         class="chip"
-                        class:selected={s.id === selectedId}
+                        class:shift-active={s.id === selectedId}
+                        class:selected={s.id === selectedId && selectedPid === null}
                         class:dragging={drag?.shiftId === s.id && drag?.fromPid === null}
                         style={chipStyle(s)}
                         draggable={!solving}
                         ondragstart={() => (drag = { shiftId: s.id, fromPid: null })}
                         ondragend={() => { drag = null; hoverPid = null; }}
-                        onclick={() => (selectedId = s.id)}
+                        onclick={() => { selectedId = s.id; selectedPid = null; }}
                         title="{s.name}{role ? ` — open: ${role}` : ''} {hhmm(s.start)} — {f.filled}/{f.total} filled · drag onto a person to assign"
                       >
                         <span class="c-name">{s.name}</span>
@@ -759,7 +847,7 @@
           </div>
         </div>
       {/each}
-      <div><button class="btn ghost icon" onclick={() => addRequirement(selected.id)}>+ people slot</button></div>
+      <div><button class="btn ghost icon" onclick={() => addRequirement(selected.id)}>+ role</button></div>
     </div>
   {/if}
 </div>
@@ -859,7 +947,10 @@
   }
   .chip:last-child { margin-bottom: 0; }
   .chip:hover { box-shadow: var(--shadow); }
-  .chip.selected { outline: 2px solid var(--accent); }
+  /* All chips of the selected shift get a dashed ring (grouping cue); the exact
+     chip you clicked gets a solid ring — shape difference, not just colour. */
+  .chip.shift-active { outline: 2px dashed var(--accent); outline-offset: 1px; }
+  .chip.selected { outline: 2px solid var(--accent); outline-offset: 0; }
   .chip .c-name { font-size: 12px; font-weight: 600; color: var(--text-h); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip .c-time { font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .chip .c-role {
@@ -870,9 +961,14 @@
   .chip.dragging { opacity: 0.4; }
   .role-input { width: 120px; font-weight: 600; }
   /* Drag-to-reassign: while dragging, eligible rows gather next to the source
-     row (which stays put) and are tinted; the one under the cursor more so.
+     row (which stays put). Ineligible cells — wrong person, or a day other than
+     the dragged shift's — grey out so valid targets stand out by contrast.
      The Unassigned row doubles as a "clear" target. */
-  .matrix tr.droppable th, .matrix tr.droppable td { background-color: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .matrix td.dim, .matrix th.dim { filter: grayscale(1); }
+  /* Grey tint on the cell itself so empty ineligible cells read differently from empty eligible ones. */
+  .matrix td.dim { background-color: color-mix(in srgb, var(--text) 7%, transparent); }
+  .matrix td.dim .chip { opacity: 0.3; }
+  .matrix th.dim { opacity: 0.3; }
   .matrix tr.drop-hover th, .matrix tr.drop-hover td { background-color: color-mix(in srgb, var(--accent) 20%, transparent); }
   /* Override drop (unavailable / unqualified / clash) — droppable, but warned in amber. */
   .matrix tr.drop-hover-warn th, .matrix tr.drop-hover-warn td { background-color: rgba(160, 111, 0, 0.22); }

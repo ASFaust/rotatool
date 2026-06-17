@@ -53,9 +53,10 @@
   <h2>Recurring shifts</h2>
   <p class="hint">
     Recurring shifts are templates: they get instanced into concrete dated shifts in the Rota
-    over your chosen range. Add <em>people slots</em> ("need N people who are X and Y") to define
-    staffing — no attributes means anyone qualifies, and <em>required</em> slots are flagged when
-    they can't be filled. <em>Importance</em> weights how much filling this shift matters. A
+    over your chosen range. Add <em>roles</em> ("need N people who are X and Y") to define
+    staffing — give each a name (optional) to label it on the grid; no attributes means anyone
+    qualifies, and <em>required</em> roles are flagged when they can't be filled.
+    <em>Importance</em> weights how much filling this shift matters. A
     <em>break</em> reserves rest after each occurrence (soft — see the Solver tab).
   </p>
 
@@ -116,10 +117,11 @@
       </div>
 
       <div class="field">
-        <span class="cap">Staffing — people slots</span>
+        <span class="cap">Staffing — roles</span>
         {#each shift.requirements as r, i (i)}
           {@const remaining = $appData.attributes.filter((a) => !r.attributeIds.includes(a.id))}
           <div class="row" style="margin-bottom: 4px; flex-wrap: wrap;">
+            <input style="width: 150px;" placeholder="Role name (optional)" value={r.label ?? ""} onchange={(e) => patchTemplateReq(shift.id, i, { label: e.currentTarget.value.trim() || undefined })} />
             <span class="muted" style="font-size: 13px;">need</span>
             <input type="number" min="1" style="width: 64px;" value={r.count} onchange={(e) => patchTemplateReq(shift.id, i, { count: Math.max(1, Number(e.currentTarget.value)) })} />
             {#if r.attributeIds.length === 0}
@@ -142,7 +144,7 @@
             <button class="btn danger icon" onclick={() => removeTemplateReq(shift.id, i)}>×</button>
           </div>
         {/each}
-        <div><button class="btn ghost icon" onclick={() => addTemplateReq(shift.id)}>+ people slot</button></div>
+        <div><button class="btn ghost icon" onclick={() => addTemplateReq(shift.id)}>+ role</button></div>
       </div>
     </div>
   {/each}

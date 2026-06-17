@@ -1,7 +1,7 @@
 <script lang="ts">
   import { appData } from "../model/store";
   import { setPersonHours, setAllPersonHours, updatePrefillSettings } from "../model/mutations";
-  import { computeDerivedHours, computePrefillSeed, personStartDate, weeklyHours } from "../model/hours";
+  import { computeDerivedHours, computePrefillSeed, computeUtilization, personStartDate, weeklyHours } from "../model/hours";
 
   // personId -> typeId -> hours derived from the tracked ledger.
   const derivedHours = $derived(computeDerivedHours($appData));
@@ -11,6 +11,31 @@
   );
 
   const round1 = (x: number) => Math.round(x * 10) / 10;
+
+  // Utilization (pace) diagnostic — read-only. Same horizon as the solver's
+  // window end: the inclusive `to` day, so it lines up with what fairness sees.
+  const horizon = $derived(new Date(new Date(`${$appData.ledgerView.to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000));
+  const util = $derived(computeUtilization($appData, horizon));
+  // Overall pace U_p = worked ÷ expected hours, as a percent; null when the
+  // person has no start date or weekly target (excluded from fairness).
+  const paceOf = (personId: string): number | null => {
+    const u = util.get(personId);
+    return u && u.eligible ? (u.workedTotal / u.denom) * 100 : null;
+  };
+  // Per-type pace breakdown, for the cell tooltip.
+  const paceBreakdown = (personId: string): string => {
+    const u = util.get(personId);
+    if (!u || !u.eligible) return "No start date or weekly target — excluded from fairness.";
+    return $appData.shiftTypes
+      .map((st) => `${st.name}: ${Math.round(((u.workedByType.get(st.id) ?? 0) / u.denom) * 100)}%`)
+      .join("\n");
+  };
+  // Cohort pace = Σ worked ÷ Σ expected over eligible people (the fairness center).
+  const cohortPace = $derived.by(() => {
+    let worked = 0, denom = 0;
+    for (const u of util.values()) if (u.eligible) { worked += u.workedTotal; denom += u.denom; }
+    return denom > 0 ? (worked / denom) * 100 : null;
+  });
   const derivedOf = (personId: string, typeId: string) => derivedHours.get(personId)?.get(typeId) ?? 0;
   const manualOf = (personId: string, typeId: string) => manual.get(`${personId}|${typeId}`) ?? 0;
 
@@ -30,7 +55,16 @@
   // Pro-rates each person's weekly target from their start date through `endDate`
   // and splits it across shift types by `weights`, overwriting all seed cells.
   // Settings live in the persisted workbook (appData.prefillSettings).
-  const endDate = $derived($appData.prefillSettings.endDate ?? $appData.ledgerView.to);
+  // The seed is *pre-window history* — hours worked before the planning window
+  // begins — so the autofill end date defaults to the day before the Ledger
+  // `from` (i.e. credit hours right up to, but not into, the range being planned).
+  function dayBefore(iso: string): string {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() - 1);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+  const endDate = $derived($appData.prefillSettings.endDate ?? dayBefore($appData.ledgerView.from));
   const weightOf = (typeId: string) => $appData.prefillSettings.weights[typeId] ?? 1;
 
   // Active people we can't pro-rate (no availability start or no hours target).
@@ -57,7 +91,10 @@
     editable — use it to record hours worked <em>before</em> you started tracking shifts here
     (e.g. when adopting mid-season). <strong>Ledger</strong> is derived automatically from the
     assigned shifts in this workbook. The <strong>total</strong> (seed + ledger) is what later
-    feeds fairness and distribution objectives.
+    feeds fairness and distribution objectives. <strong>Pace</strong> is each person's utilization —
+    total hours ÷ the hours expected over the time they've been available (at their weekly target),
+    through the Ledger end date; hover for the per-type split. It's the signal the fairness objective
+    balances; “—” means no start date or weekly target, so they're excluded.
   </p>
 
   {#if $appData.persons.length === 0}
@@ -72,6 +109,7 @@
               <th>{st.name}</th>
             {/each}
             <th class="total-col">Total</th>
+            <th class="pace-col">Pace</th>
           </tr>
           <tr class="legend">
             <th></th>
@@ -79,6 +117,7 @@
               <th><span class="seed-l">seed</span> + ledger = total</th>
             {/each}
             <th class="total-col">seed + ledger</th>
+            <th class="pace-col">worked ÷ expected</th>
           </tr>
         </thead>
         <tbody>
@@ -107,6 +146,9 @@
                 </td>
               {/each}
               <td class="total-col coltotal">{round1(personTotal(p.id))}</td>
+              <td class="pace-col coltotal" title={paceBreakdown(p.id)}>
+                {paceOf(p.id) === null ? "—" : `${Math.round(paceOf(p.id)!)}%`}
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -117,6 +159,9 @@
               <td class="coltotal">{round1(typeTotal(st.id))}</td>
             {/each}
             <td class="total-col coltotal">{round1(grandTotal)}</td>
+            <td class="pace-col coltotal" title="Worked ÷ expected over everyone with a start date and weekly target — the fairness center.">
+              {cohortPace === null ? "—" : `${Math.round(cohortPace)}%`}
+            </td>
           </tr>
         </tfoot>
       </table>
@@ -127,8 +172,9 @@
       <p class="hint">
         Fairly prefill the seed columns: each active person is credited the hours they'd have
         worked from their start date (earliest availability) through the end date below, at their
-        weekly hours target, split across shift types by the weights. This <strong>overwrites</strong>
-        all seed values.
+        weekly hours target, split across shift types by the weights. The end date defaults to the
+        day before the Ledger range — the seed is the <em>history before</em> the window you're about
+        to plan. This <strong>overwrites</strong> all seed values.
       </p>
       <div class="controls">
         <label class="ctl">
@@ -186,6 +232,7 @@
   .led { color: var(--text); }
   .tot { font-weight: 600; color: var(--text-h); }
   .total-col { border-left: 2px solid var(--border); text-align: right; }
+  .pace-col { border-left: 1px solid var(--border); text-align: right; }
   .coltotal { font-weight: 600; color: var(--text-h); font-variant-numeric: tabular-nums; }
 
   .prefiller {

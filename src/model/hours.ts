@@ -124,23 +124,76 @@ export function availableWeeks(data: AppData, personId: string, from: Date, to: 
 }
 
 /**
- * Pro-rata seed hours for the Person Hours autofill tool. For each active
- * person, hours they "should" have worked from their start through `endDate` at
- * their weekly target, split across shift types by `weights` (relative ratios).
+ * Per-person utilization through `horizon` — the comparable, tenure-normalized
+ * pace signal that drives the fairness target pre-pass and the Person Hours
+ * diagnostic. For each person:
  *
- *   weeks_p  = max(0, (endDate − start_p) / 1 week)
+ *   denom_p   = availableWeeks(start_p → horizon) × weeklyHours_p   (expected hours)
+ *   worked_pt = seed (personHours) + ledger-derived hours, measured through horizon
+ *   U_pt      = worked_pt / denom_p   (dimensionless, comparable across people)
+ *
+ * `denom_p` is one shared denominator across all shift types, so per-type `U_pt`
+ * sum to the person's total `U_p` (total and per-type fairness fall out of the
+ * same number). It is availability-aware (leave doesn't accrue expected hours).
+ *
+ * `eligible` is false for anyone missing a start date or a positive weekly target
+ * (denom 0) — they are excluded from the fairness term and surfaced in a warning,
+ * replacing the old "blank target = full share / no start = window start"
+ * fallbacks. Worked hours are still reported for them (useful on the tab).
+ */
+export interface PersonUtilization {
+  personId: string;
+  eligible: boolean;
+  /** Expected hours over the person's tenure through `horizon`; 0 when ineligible. */
+  denom: number;
+  /** typeId -> already-worked hours (seed + ledger-derived through horizon). */
+  workedByType: Map<string, number>;
+  workedTotal: number;
+}
+
+export function computeUtilization(data: AppData, horizon: Date): Map<string, PersonUtilization> {
+  const derived = computeDerivedHours(data, horizon);
+  const seedByPerson = new Map<string, Map<string, number>>();
+  for (const ph of data.personHours) {
+    let m = seedByPerson.get(ph.personId);
+    if (!m) seedByPerson.set(ph.personId, (m = new Map()));
+    m.set(ph.typeId, (m.get(ph.typeId) ?? 0) + ph.hours);
+  }
+
+  const out = new Map<string, PersonUtilization>();
+  for (const p of data.persons) {
+    const workedByType = new Map<string, number>();
+    const bump = (typeId: string, h: number) => workedByType.set(typeId, (workedByType.get(typeId) ?? 0) + h);
+    for (const [typeId, h] of seedByPerson.get(p.id) ?? []) bump(typeId, h);
+    for (const [typeId, h] of derived.get(p.id) ?? []) bump(typeId, h);
+    let workedTotal = 0;
+    for (const h of workedByType.values()) workedTotal += h;
+
+    const start = personStartDate(data, p.id);
+    const perWeek = weeklyHours(p);
+    let denom = 0;
+    if (start && perWeek !== null && perWeek > 0) denom = availableWeeks(data, p.id, start, horizon) * perWeek;
+    out.set(p.id, { personId: p.id, eligible: denom > 0, denom, workedByType, workedTotal });
+  }
+  return out;
+}
+
+/**
+ * Pro-rata seed hours for the Person Hours autofill tool. For each active person,
+ * the hours they "should" have worked from their start through `endDate` at their
+ * weekly target, split across shift types by `weights`.
+ *
+ *   weeks_p  = availableWeeks(start_p → endDate, inclusive)
  *   target_p = weeklyHours_p × weeks_p
  *   seed_p,t = target_p × weight_t / Σ weight
  *
- * People lacking an availability start or a workload target are skipped. Types
- * whose weight is ≤ 0 get nothing. Returns the full replacement `personHours`
- * (only non-zero rows, matching the sparse storage convention).
- *
- * NOTE: this reads `weeklyHours` as an *absolute* hours commitment. The solver's
- * fairness term, by contrast, treats it as a *relative* weight (only ratios
- * between people matter). So a seed produced here is on a real-hours scale and is
- * only approximately commensurate with hours derived from tracked shifts when the
- * entered targets aren't literal hours — acceptable for the mid-season seed.
+ * `weeks_p` is the **same availability-aware expected-hours** measure the fairness
+ * pre-pass and the Person Hours pace use (`computeUtilization`'s `denom`), over an
+ * inclusive end-of-day endpoint — so a freshly-autofilled roster (no tracked
+ * ledger hours yet) reads an even ~100% pace for everyone, and leave doesn't
+ * inflate the seed. People lacking an availability start or a positive weekly
+ * target are skipped; types with weight ≤ 0 get nothing. Returns the full
+ * replacement `personHours` (only non-zero rows, the sparse convention).
  */
 export function computePrefillSeed(
   data: AppData,
@@ -153,13 +206,16 @@ export function computePrefillSeed(
 
   const rows: PersonHours[] = [];
   if (!(weightSum > 0) || Number.isNaN(end)) return rows;
+  // Treat `endDate` as inclusive (through the end of that day), matching the
+  // day-granular semantics of `availableWeeks` and the pace horizon on the tab.
+  const endInclusive = new Date(end + MS_PER_DAY);
 
   for (const p of data.persons) {
     if (!p.activated) continue;
     const start = personStartDate(data, p.id);
     const perWeek = weeklyHours(p);
     if (!start || perWeek === null) continue;
-    const weeks = Math.max(0, (end - start.getTime()) / MS_PER_WEEK);
+    const weeks = availableWeeks(data, p.id, start, endInclusive);
     const target = perWeek * weeks;
     if (!(target > 0)) continue;
     for (const st of data.shiftTypes) {

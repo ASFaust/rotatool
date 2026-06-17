@@ -113,12 +113,37 @@ function v6ToV7(raw: Obj): Obj {
   };
 }
 
+/**
+ * v7 → v8: the fairness term was reworked from a relative-ratio model to a
+ * history-aware target-deviation one. `mode` changed values ("deviation" → "L1",
+ * "spread" → "min-max") and a `maxCatchUpHours` ramp cap was added. Map the old
+ * mode and backfill the cap; Zod drops anything else that no longer fits.
+ */
+function v7ToV8(raw: Obj): Obj {
+  const ss = isObj(raw.solverSettings) ? raw.solverSettings : {};
+  const f = isObj(ss.fairness) ? ss.fairness : {};
+  const mode = f.mode === "spread" ? "min-max" : "L1"; // "deviation"/absent → L1
+  return {
+    ...raw,
+    solverSettings: {
+      ...ss,
+      fairness: {
+        ...f,
+        mode,
+        maxCatchUpHours: typeof f.maxCatchUpHours === "number" ? f.maxCatchUpHours : 40,
+      },
+    },
+    meta: { ...(isObj(raw.meta) ? raw.meta : {}), schemaVersion: 8 },
+  };
+}
+
 /** Ordered migration steps; index by the *source* version they upgrade from. */
 const STEPS: Record<number, (raw: Obj) => Obj> = {
   3: v3ToV4,
   4: v4ToV5,
   5: v5ToV6,
   6: v6ToV7,
+  7: v7ToV8,
 };
 
 /**
