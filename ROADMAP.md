@@ -137,10 +137,6 @@ Quick, mostly-cosmetic items (all in [src/App.svelte](src/App.svelte) unless
 noted):
 
 - **GitHub link on the Overview page** — link out to the project repo.
-- **Move the dark-mode toggle to the right**, alongside the other action buttons
-  (Undo/Redo/Import/Save/…), instead of in the brand area on the left.
-- **Drop "client-side rota generator" from the header** — remove that subtitle
-  next to the Rotatool brand.
 
 ### 8. Built-in examples cleanup
 

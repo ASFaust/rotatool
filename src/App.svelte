@@ -158,26 +158,6 @@
 <header class="topbar">
   <div class="brand">
     <strong>Rotatool</strong>
-    <button
-      class="theme-toggle"
-      onclick={toggleTheme}
-      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      {#if theme === "dark"}
-        <!-- sun: currently dark, click for light -->
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-        </svg>
-      {:else}
-        <!-- moon: currently light, click for dark -->
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      {/if}
-    </button>
-    <span class="muted">client-side rota generator</span>
   </div>
   <div class="actions">
     <button class="btn ghost" onclick={undo} disabled={!$canUndo || solving} title="Undo (Ctrl+Z)" aria-label="Undo">↶ Undo</button>
@@ -207,6 +187,25 @@
       {/if}
     </div>
     <button class="btn ghost" onclick={clearAll} disabled={solving}>Clear</button>
+    <button
+      class="theme-toggle"
+      onclick={toggleTheme}
+      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {#if theme === "dark"}
+        <!-- sun: currently dark, click for light -->
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        </svg>
+      {:else}
+        <!-- moon: currently light, click for dark -->
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      {/if}
+    </button>
     <input bind:this={fileInput} type="file" accept=".json" onchange={onFileChosen} hidden />
   </div>
 </header>
@@ -342,19 +341,14 @@
   .brand strong {
     font-size: 20px;
     color: var(--text-h);
-    margin-right: 8px;
-  }
-  .brand .muted {
-    font-size: 13px;
   }
   .theme-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    align-self: stretch;
+    width: 34px;
     padding: 0;
-    margin-right: 8px;
     vertical-align: middle;
     border: 1px solid var(--border);
     border-radius: 6px;
