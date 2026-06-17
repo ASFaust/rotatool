@@ -157,6 +157,45 @@ spec in [example.md](example.md)) need to be generic and shippable:
 - **Record a short YouTube walkthrough** showcasing the tool, and link it from the
   Overview page / README.
 
+### 10. Avoidance rules (general "cooldown" constraints)
+
+We need a way to discourage things like *back-to-back morning surveys* — but
+expressed **generically**, never hardcoded for one org (no "Archelon morning
+survey" special case). The mechanism is a new, addable rule type:
+
+> **"Avoid assigning `[shift or shift type]` for `[N hours]` after `[shift or
+> shift type]`."**
+
+- Either side can be a **concrete shift** or a **shift type**, so it covers both
+  one-off and recurring cases.
+- A rule is a **soft penalty with a weight** (not a hard ban) so the solver can
+  break it when coverage demands — same philosophy as the other balance terms.
+- The motivating example (don't do two early surveys in a row) falls out of a
+  type→type rule with the shift's own type on both sides; nothing org-specific.
+
+Touches: `schema.ts` (new rule entity + migration), a small editor surface for
+the rule list (likely under Shifts or a constraints area), and the solver
+objective in `builder.ts` / `formulation.ts` (penalty terms keyed on the time gap
+between assignments of the named shifts/types for the same person).
+
+### 11. People preferences (weighted, signable)
+
+A new **Preferences** sub-tab under the **People** tab for soft, per-person
+preferences that feed the solver objective. Each preference carries a **weight
+`z` that may be negative** (negative = aversion / "avoid"):
+
+- **Person → shift type** — "person X prefers shift type Y, weight z."
+- **Person ↔ person** — "person X prefers working with person Y, weight z"
+  (co-assignment on the same shift / overlapping time).
+
+These are soft terms, balanced against fairness and coverage like everything else.
+
+Touches: `schema.ts` (preference entities + migration), a new
+`PreferencesView.svelte` wired into `peopleTabs` in [src/App.svelte](src/App.svelte)
+alongside Directory / Attributes / Person Hours, and new objective terms in
+`builder.ts` / `formulation.ts` (per-assignment bonus for shift-type prefs;
+pairwise bonus for people who share a shift).
+
 ---
 
 ## Document status
