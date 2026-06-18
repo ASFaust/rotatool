@@ -6,9 +6,8 @@
  * lossless round-trip with zero ceremony.
  */
 
-import { AppDataSchema, SCHEMA_VERSION, defaultShiftType, SHIFT_TYPE_COLORS } from "../model/schema";
+import { AppDataSchema, SCHEMA_VERSION } from "../model/schema";
 import type { AppData } from "../model/types";
-import { newId } from "../model/store";
 import { migrate } from "./migrate";
 
 /** A problem encountered while importing (kept for the Overview error list). */
@@ -43,60 +42,4 @@ export function importWorkbook(input: ArrayBuffer | Uint8Array): ImportResult {
 export function exportWorkbook(data: AppData): Uint8Array {
   const out = { ...data, meta: { ...data.meta, schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString() } };
   return new TextEncoder().encode(JSON.stringify(out, null, 2));
-}
-
-// ---------------------------------------------------------------------------
-// Seed data (a small example dataset for first-run / demo)
-// ---------------------------------------------------------------------------
-
-/** Build a tiny restaurant example dataset (validated AppData). */
-export function createSeedData(): AppData {
-  const cookId = newId();
-  const supId = newId();
-  const aliceId = newId();
-  const bobId = newId();
-  const carolId = newId();
-  const serviceTypeId = newId();
-
-  return AppDataSchema.parse({
-    meta: { schemaVersion: SCHEMA_VERSION, appVersion: "0.0.0" },
-    attributes: [
-      { id: cookId, name: "cook" },
-      { id: supId, name: "supervisor" },
-    ],
-    persons: [
-      { id: aliceId, name: "Alice", activated: true },
-      { id: bobId, name: "Bob", activated: true },
-      { id: carolId, name: "Carol", activated: true },
-    ],
-    personAttributes: [
-      { personId: aliceId, attributeId: cookId },
-      { personId: bobId, attributeId: supId },
-      { personId: carolId, attributeId: cookId },
-    ],
-    availability: [
-      { personId: aliceId, kind: "available", start: "2026-01-01" },
-      { personId: bobId, kind: "available", start: "2026-01-01" },
-      { personId: carolId, kind: "available", start: "2026-01-01" },
-    ],
-    shiftTypes: [defaultShiftType(), { id: serviceTypeId, name: "service", color: SHIFT_TYPE_COLORS[0] }],
-    shiftTemplates: [
-      {
-        id: newId(),
-        name: "Evening Service",
-        typeId: serviceTypeId,
-        importance: 1,
-        activated: true,
-        durationMinutes: 240,
-        breakMinutes: 0,
-        activationDateTime: "2026-06-01T17:00:00",
-        frequency: { value: 1, unit: "days" },
-        requirements: [
-          { attributeIds: [cookId], count: 1, required: true },
-          { attributeIds: [supId], count: 1, required: true },
-        ],
-      },
-    ],
-    solverSettings: {},
-  });
 }

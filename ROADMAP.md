@@ -25,12 +25,9 @@ current shape, for grounding the work below:
   ([src/model/schema.ts](src/model/schema.ts), `ShiftTemplateSchema`). The old
   `placement: strict | strictTime | anyTime` field was removed in this rework.
   "One-time shifts" are concrete `Shift` rows, edited on a separate sub-tab.
-- **"Ledger" is still the internal name** for the timeline-of-record: `LedgerView`,
-  `model/ledger.ts`, the `"ledger"` tab id, `generate.ts`, etc. (~16 files mention
-  it). User-facing copy already says "Rota".
 - Generate runs one solve that places template occurrences *and* assigns people,
   on the Timeline. Assignment controls currently live on both Timeline and Grid.
-- Schema is at `SCHEMA_VERSION = 8`; fairness was reworked to history-aware
+- Schema is at `SCHEMA_VERSION = 9`; fairness was reworked to history-aware
   per-person hour targets (done — [docs/archive/fairness_rework.md](docs/archive/fairness_rework.md)).
 
 ---
@@ -38,7 +35,7 @@ current shape, for grounding the work below:
 ## The work
 
 Roughly ordered; the shift-model rework (1) and the two-stage solve (2) are the
-big ones and are coupled. Solver polish (6) is the gate on release.
+big ones and are coupled. Solver polish (5) is the gate on release.
 
 ### 1. Unify the shift editor (recurring · weekdays · any-time)
 
@@ -94,23 +91,15 @@ Touches: `formulation.ts` / `generate.ts` (new placement model + sequencing),
 The intended flow: **start on Timeline → place shifts → assign people**, all in one
 view.
 
+*Done:* double-clicking an empty timeline spot adds a one-time shift (centered on
+the cursor, snapped to the hour), and timeline blocks are drag-to-move with
+1-minute snapping and animated lane re-packing.
+
 - **Move all assignment controls to Timeline.** Remove them from the **Grid** tab
-  — Grid becomes display/export only. ([LedgerView.svelte](src/ui/LedgerView.svelte),
+  — Grid becomes display/export only. ([RotaView.svelte](src/ui/RotaView.svelte),
   which currently renders both via a `mode` prop.)
-- **Double-click to add a shift.** Double-clicking an empty spot on the Timeline
-  creates a **new one-time shift** at the clicked day + hour (editable afterwards).
 
-### 4. Rename "ledger" → timeline / grid / rota everywhere
-
-Keep the three Rota sub-tabs (*Timeline*, *Grid*, *Solver*). **The word "ledger"
-must not appear anywhere in the project** — not in code identifiers, file names,
-comments, or UI. Use *timeline*, *grid*, or *rota* as appropriate.
-
-Touches: `LedgerView.svelte`, `model/ledger.ts`, `LedgerShift` / `LedgerAssignment`
-types, the `"ledger"` tab id in `App.svelte`, and the ~16 files that reference it
-(`grep -ril ledger src`). The archived [ledger-generate-loop.md](docs/archive/ledger-generate-loop.md) keeps the old name for history.
-
-### 5. Export & the A4 print editor
+### 4. Export & the A4 print editor
 
 - **Export buttons move off Timeline.** They live **only on Grid** — the grid is
   the main export format.
@@ -118,7 +107,7 @@ types, the `"ledger"` tab id in `App.svelte`, and the ~16 files that reference i
   a tiling of **A4 pages** with sensible seams, scaling, and pagination, so a large
   rota prints cleanly across multiple sheets. This is a substantial new surface.
 
-### 6. Solver / optimizer polish (release gate)
+### 5. Solver / optimizer polish (release gate)
 
 Some optimizer behaviour is "garbage-ish" and needs work **before** an official
 release — **fairness and shift balancing especially** may need a rethink. They're
@@ -131,33 +120,24 @@ folding into this pass: balance terms competing on the shared hour layer flatten
 the search landscape on month-long ranges (fairness + dailyPeak + breaks plateau
 below coverage-optimum); candidate fix is a two-stage coverage-then-balance solve.
 
-### 7. Small UI polish
-
-Quick, mostly-cosmetic items (all in [src/App.svelte](src/App.svelte) unless
-noted):
-
-- **GitHub link on the Overview page** — link out to the project repo.
-
-### 8. Built-in examples cleanup
+### 6. Built-in examples cleanup
 
 The bundled examples ([src/persistence/examples.ts](src/persistence/examples.ts),
-spec in [example.md](example.md)) need to be generic and shippable:
+spec in [example-field-camp.md](example-field-camp.md)) need to be generic and
+shippable:
 
-- **Remove the ARCHELON / Rethymno branding** — keep the scenario shape (a
-  multi-shift seasonal field project is a good stress test) but strip the
-  real-organisation name and place. Rename `example.md` accordingly.
-- **Remove the "Alice & Bob" simple cook rota** example.
 - **Add examples for other kinds of org/schedule** — e.g. a restaurant, a clinic,
-  a small shop — to show the tool isn't single-purpose.
+  a small shop — to show the tool isn't single-purpose. *Deferred:* shipping with
+  one example for now.
 
-### 9. Pre-launch / outreach
+### 7. Pre-launch / outreach
 
 - **Set up a contact email** for correspondence (bug reports, feedback) and surface
   it in the app/README.
 - **Record a short YouTube walkthrough** showcasing the tool, and link it from the
   Overview page / README.
 
-### 10. Avoidance rules (general "cooldown" constraints)
+### 8. Avoidance rules (general "cooldown" constraints)
 
 We need a way to discourage things like *back-to-back morning surveys* — but
 expressed **generically**, never hardcoded for one org (no "Archelon morning
@@ -178,7 +158,7 @@ the rule list (likely under Shifts or a constraints area), and the solver
 objective in `builder.ts` / `formulation.ts` (penalty terms keyed on the time gap
 between assignments of the named shifts/types for the same person).
 
-### 11. People preferences (weighted, signable)
+### 9. People preferences (weighted, signable)
 
 A new **Preferences** sub-tab under the **People** tab for soft, per-person
 preferences that feed the solver objective. Each preference carries a **weight
@@ -203,7 +183,8 @@ pairwise bonus for people who share a shift).
 Stale docs were moved to **[docs/archive/](docs/archive/)** on 2026-06-17, each
 with a dated "superseded" banner. Kept docs and what they are:
 
-- **[example.md](example.md)** — the ARCHELON test scenario; current, fine as-is.
+- **[example-field-camp.md](example-field-camp.md)** — the de-branded seasonal
+  field-camp test scenario (the single bundled example); current, fine as-is.
 - **[docs/archive/README.md](docs/archive/README.md)** — *archived.* Was the
   default Vite/Svelte template boilerplate, never customized. A real project README
   still needs writing before release.
@@ -216,7 +197,7 @@ with a dated "superseded" banner. Kept docs and what they are:
 - **[docs/notes/dev-environment.md](docs/notes/dev-environment.md)** — current.
 - **[docs/archive/fairness_rework.md](docs/archive/fairness_rework.md)** —
   *archived.* The fairness rework shipped 2026-06-17; its "Resolution (as built)"
-  section documents the current fairness implementation. Further polish in item 6.
+  section documents the current fairness implementation. Further polish in item 5.
 - **[docs/archive/ledger-generate-loop.md](docs/archive/ledger-generate-loop.md)** —
   *archived.* Substantially stale: describes the removed `autogenerated/committed/
   performed` status model and auto-lock generate/regenerate loop.

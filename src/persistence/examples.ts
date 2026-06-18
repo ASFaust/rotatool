@@ -9,7 +9,6 @@
 import { AppDataSchema, SCHEMA_VERSION, defaultShiftType, SHIFT_TYPE_COLORS } from "../model/schema";
 import type { AppData } from "../model/types";
 import { newId } from "../model/store";
-import { createSeedData } from "./io";
 
 export interface ExampleTemplate {
   id: string;
@@ -19,26 +18,27 @@ export interface ExampleTemplate {
 }
 
 // ---------------------------------------------------------------------------
-// ARCHELON Rethymno — June 2027 (see example.md for the full specification)
+// Seasonal field camp — June 2027 (see example-field-camp.md for the full spec)
 // ---------------------------------------------------------------------------
 
 /**
- * Sea-turtle conservation duty rota: 2 leaders + 15 volunteers with staggered
- * arrival/departure dates, daily morning-survey teams (each needing an MS
- * leader), an MS driver run, cooking, three kiosk shifts, plus weekly
- * presentations (needing a presenter) and a grocery run (needing a driver).
+ * Seasonal wildlife-monitoring field camp duty rota: 2 leaders + 18 volunteers
+ * with staggered arrival/departure dates, daily morning-survey teams (each
+ * needing a survey leader), a survey driver run, cooking, AM/PM basecamp duty,
+ * three info-kiosk shifts, plus weekly public talks (needing a presenter) and a
+ * grocery run (needing a driver).
  *
- * Specialist seats (MS leader, driver, presenter) are `required` people slots;
- * generic seats are slots with no attributes, which anyone can fill.
+ * Specialist seats (survey leader, driver, presenter) are `required` people
+ * slots; generic seats are slots with no attributes, which anyone can fill.
  *
  * Workload is dynamic (demand / people-on-site varies through June), so the
  * fairness objective is enabled. Everyone (leaders included) carries the same
  * 20h/wk target, which sets each person's expected hours; fairness balances how
  * close everyone is to their own pace (utilization).
  */
-function createArchelonData(): AppData {
+function createFieldCampData(): AppData {
   const ATTRIBUTE_NAMES = [
-    "MS leader",
+    "survey leader",
     "camp leader",
     "presenter",
     "german",
@@ -61,24 +61,28 @@ function createArchelonData(): AppData {
   // Everyone (leaders included) carries the same 20h/week target.
   const PEOPLE: Array<[string, string, string | undefined, number, AttrName[]]> = [
     // Leaders
-    ["Maria Konstantinou", "2027-05-10", undefined, 20, ["camp leader", "MS leader", "presenter", "greek", "english", "german", "driver"]],
-    ["Lukas Brandt", "2027-05-15", undefined, 20, ["camp leader", "MS leader", "presenter", "german", "english", "french", "driver"]],
+    ["Maria Konstantinou", "2027-05-10", undefined, 20, ["camp leader", "survey leader", "presenter", "greek", "english", "german", "driver"]],
+    ["Lukas Brandt", "2027-05-15", undefined, 20, ["camp leader", "survey leader", "presenter", "german", "english", "french", "driver"]],
     // Volunteers
-    ["Sofia Müller", "2027-05-01", "2027-06-15", 20, ["MS leader", "presenter", "german", "english", "driver"]],
-    ["Thomas Weber", "2027-05-15", "2027-07-31", 20, ["MS leader", "english", "german", "driver"]],
+    ["Sofia Müller", "2027-05-01", "2027-06-15", 20, ["survey leader", "presenter", "german", "english", "driver"]],
+    ["Thomas Weber", "2027-05-15", "2027-07-31", 20, ["survey leader", "english", "german", "driver"]],
     ["Elena Rossi", "2027-05-20", "2027-06-20", 20, ["presenter", "english", "french", "italian"]],
     ["James Carter", "2027-06-01", "2027-08-31", 20, ["english", "driver"]],
     ["Camille Dubois", "2027-06-01", "2027-07-15", 20, ["presenter", "french", "english"]],
-    ["Anna Schmidt", "2027-05-10", "2027-06-30", 20, ["MS leader", "german", "english", "driver"]],
+    ["Anna Schmidt", "2027-05-10", "2027-06-30", 20, ["survey leader", "german", "english", "driver"]],
     ["Yiannis Pappas", "2027-05-25", "2027-08-25", 20, ["greek", "english", "driver"]],
     ["Laura Bianchi", "2027-06-05", "2027-09-05", 20, ["english", "french"]],
     ["Max Fischer", "2027-06-10", "2027-07-10", 20, ["german", "english", "driver"]],
     ["Chloé Martin", "2027-05-20", "2027-06-18", 20, ["presenter", "french", "english", "driver"]],
     ["David Jones", "2027-06-01", "2027-07-31", 20, ["english", "driver"]],
-    ["Nadia Hofmann", "2027-06-12", "2027-09-12", 20, ["MS leader", "german", "english"]],
+    ["Nadia Hofmann", "2027-06-12", "2027-09-12", 20, ["survey leader", "german", "english"]],
     ["Petros Nikolaou", "2027-05-30", "2027-06-28", 20, ["greek", "english", "driver"]],
     ["Sarah Klein", "2027-06-08", "2027-08-08", 20, ["german", "english"]],
     ["Marco Conti", "2027-06-15", "2027-09-15", 20, ["english", "italian", "driver"]],
+    // Extra survey-leader + presenter volunteers, present through all of June.
+    ["Hannah Vogel", "2027-05-12", "2027-08-15", 20, ["survey leader", "presenter", "german", "english"]],
+    ["Paolo Greco", "2027-05-18", "2027-09-30", 20, ["survey leader", "presenter", "italian", "english", "driver"]],
+    ["Sandrine Leroy", "2027-05-22", "2027-07-20", 20, ["survey leader", "presenter", "french", "english"]],
   ];
 
   const persons: AppData["persons"] = [];
@@ -136,29 +140,32 @@ function createArchelonData(): AppData {
     });
   };
 
-  // Three shift types group the work: conservation (the morning surveys),
-  // camp work (cook/driver/grocery logistics) and PA work (public awareness:
-  // kiosk + presentations).
-  const CONSERVATION = "Conservation work";
+  // Three shift types group the work: survey work (the morning surveys),
+  // camp work (cook/driver/grocery logistics) and outreach (public-facing:
+  // kiosk + public talks).
+  const SURVEY = "Survey work";
   const CAMP = "Camp work";
-  const PA = "PA work";
+  const OUTREACH = "Outreach";
 
-  // Daily shifts (pinned day + time). Each MS team: 1 required MS leader,
-  // 1 required anyone, 1 optional anyone.
+  // Daily shifts (pinned day + time). Each survey team: 1 required survey
+  // leader, 1 required anyone, 1 optional anyone.
   for (const team of ["A", "B", "C"]) {
-    addTemplate(`Morning Survey ${team}`, CONSERVATION, "05:00", 240, 1, [
-      { attrs: ["MS leader"], count: 1, required: true, label: "MS leader" },
+    addTemplate(`Morning Survey ${team}`, SURVEY, "05:00", 240, 1, [
+      { attrs: ["survey leader"], count: 1, required: true, label: "survey leader" },
       { attrs: [], count: 1, required: true, label: "surveyor" },
       { attrs: [], count: 1, label: "surveyor" },
     ], 120);
   }
-  addTemplate("MS Driver", CAMP, "05:00", 180, 1, [{ attrs: ["driver"], count: 1, required: true, label: "driver" }], 180);
+  addTemplate("Survey Driver", CAMP, "05:00", 180, 1, [{ attrs: ["driver"], count: 1, required: true, label: "driver" }], 180);
   addTemplate("Cooking", CAMP, "14:00", 120, 1, [{ attrs: [], count: 2, label: "cook" }]);
-  // Kiosk shifts abut (08–11, 11–14, 14–17); the 1h break makes back-to-back
+  // Basecamp duty: a 2h AM and a 2h PM shift staffing camp each day.
+  addTemplate("Basecamp AM", CAMP, "07:00", 120, 1, [{ attrs: [], count: 1, required: true, label: "basecamp" }]);
+  addTemplate("Basecamp PM", CAMP, "17:00", 120, 1, [{ attrs: [], count: 1, required: true, label: "basecamp" }]);
+  // Kiosk shifts abut (10–13, 13–16, 16–19); the 1h break makes back-to-back
   // kiosk for the same person cost an hour of violated break time.
-  addTemplate("Kiosk 1", PA, "08:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
-  addTemplate("Kiosk 2", PA, "11:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
-  addTemplate("Kiosk 3", PA, "14:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
+  addTemplate("Kiosk 1", OUTREACH, "10:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
+  addTemplate("Kiosk 2", OUTREACH, "13:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
+  addTemplate("Kiosk 3", OUTREACH, "16:00", 180, 1, [{ attrs: [], count: 2, required: true }], 60);
 
   // Weekly shifts pinned to a fixed day + time (the anchor weekday). Five
   // presentation templates ≙ five presentations per week, ≥1 presenter each,
@@ -168,7 +175,7 @@ function createArchelonData(): AppData {
   // person on a 05:00 morning survey next day.
   const presentationAnchors = ["2027-06-07", "2027-06-07", "2027-06-01", "2027-06-02", "2027-06-03"];
   presentationAnchors.forEach((anchorDate, idx) => {
-    addTemplate(`Presentation ${idx + 1}`, PA, "19:00", 240, 7, [
+    addTemplate(`Presentation ${idx + 1}`, OUTREACH, "19:00", 240, 7, [
       { attrs: ["presenter"], count: 1, required: true, label: "presenter" },
       { attrs: [], count: 2, label: "helper" },
     ], 480, anchorDate);
@@ -195,8 +202,8 @@ function createArchelonData(): AppData {
       peakWindow: { enabled: true, weight: 1, windowHours: 36 },
       fairness: { enabled: true, weight: 1, mode: "L1", perShiftType: true, maxCatchUpHours: 40 },
     },
-    // Open the Ledger on the first week (May 31 – June 6, 2027).
-    ledgerView: { from: "2027-05-31", to: "2027-06-06" },
+    // Open the Rota on the first week (May 31 – June 6, 2027).
+    rotaRange: { from: "2027-05-31", to: "2027-06-06" },
   });
 }
 
@@ -206,17 +213,10 @@ function createArchelonData(): AppData {
 
 export const EXAMPLES: ExampleTemplate[] = [
   {
-    id: "simple-cook",
-    name: "Simple cook rota (Alice & Bob)",
+    id: "field-camp",
+    name: "Seasonal field camp — June 2027",
     description:
-      "Tiny restaurant: 3 people, one daily evening service needing a cook and a supervisor.",
-    create: createSeedData,
-  },
-  {
-    id: "archelon-rethymno",
-    name: "ARCHELON Rethymno — June 2027",
-    description:
-      "Sea-turtle conservation rota: 17 people with staggered stays, daily morning surveys, driver, cooking and kiosk shifts, weekly presentations and grocery runs.",
-    create: createArchelonData,
+      "Wildlife-monitoring field camp rota: 20 people with staggered stays, daily morning surveys, driver, cooking, basecamp and kiosk shifts, weekly public talks and grocery runs.",
+    create: createFieldCampData,
   },
 ];

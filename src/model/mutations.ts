@@ -4,7 +4,7 @@
  * `mutate(fn)` runs a mutator against the store and notifies subscribers. The
  * named helpers cover the operations that need care — chiefly deletes, which
  * must cascade so no reference is left dangling. Concrete-shift operations
- * (instancing, slot assignment) live in ledger.ts.
+ * (instancing, slot assignment) live in rota.ts.
  */
 
 import { appData, newId } from "./store";
@@ -236,12 +236,12 @@ export function removeShiftTemplate(id: string): void {
   });
 }
 
-// --- Ledger view -----------------------------------------------------------
+// --- Rota range ------------------------------------------------------------
 
-/** Persist the Ledger timeline window (date-only `from`/`to`, `to` inclusive). */
-export function setLedgerView(from: string, to: string): void {
+/** Persist the Rota date window (date-only `from`/`to`, `to` inclusive). */
+export function setRotaRange(from: string, to: string): void {
   mutate((d) => {
-    d.ledgerView = { from, to };
+    d.rotaRange = { from, to };
   });
 }
 

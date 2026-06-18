@@ -26,7 +26,7 @@
 
 import { LpBuilder } from "./builder";
 import type { HighsLikeSolution, LpStats } from "./builder";
-import { isPersonAvailable } from "../model/ledger";
+import { isPersonAvailable } from "../model/rota";
 import { computeUtilization } from "../model/hours";
 import type { PersonUtilization } from "../model/hours";
 import type { AppData, Shift } from "../model/types";
@@ -92,7 +92,7 @@ interface SeatVar {
  * constrain in-window seats (a still-running shift, a break reaching in, the peak
  * rolling window), so its *filled* slots are pulled in as fixed busy time. That
  * "halo" is bounded by time (the largest shift footprint and, if enabled, the
- * peak window), so it doesn't grow as the ledger fills up over a season.
+ * peak window), so it doesn't grow as the rota fills up over a season.
  *
  * `rangeStart`/`rangeEnd` also let the fairness term pro-rate each person's load
  * over the time they've been present (tenure).
@@ -117,7 +117,7 @@ export function buildAssignmentModel(
   // in-window seat. Overlap and breaks reach at most one shift footprint
   // (duration + break) either side; the peak term reaches its window width. Use
   // the max so the halo is provably complete, yet bounded by time rather than by
-  // total ledger size.
+  // total rota size.
   const peakCfg = data.solverSettings.peakWindow;
   const peakWindowMs = peakCfg.enabled && peakCfg.weight > 0 ? peakCfg.windowHours * 3_600_000 : 0;
   let maxFootprintMs = 0;
@@ -370,7 +370,7 @@ export function buildAssignmentModel(
       // ── History-aware: per-person hour targets from a utilization pre-pass. ──
       // Per eligible person p and scope:
       //   denom_p  = availableWeeks(start_p → rangeEnd) × weeklyHours_p   (expected hrs)
-      //   worked_p = seed + ledger-derived hours through rangeEnd (incl. already-
+      //   worked_p = seed + rota-derived hours through rangeEnd (incl. already-
       //              filled in-window slots, so the target below isn't double-counted)
       //   T        = (Σ_elig worked + pool) / Σ_elig denom   ← post-distribution equal
       //              utilization: the center at which Σ targets = pool, so targets

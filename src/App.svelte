@@ -13,7 +13,7 @@
   import RecurringShiftsView from "./ui/RecurringShiftsView.svelte";
   import OneTimeShiftsView from "./ui/OneTimeShiftsView.svelte";
   import SolverSettingsView from "./ui/SolverSettingsView.svelte";
-  import LedgerView from "./ui/LedgerView.svelte";
+  import RotaView from "./ui/RotaView.svelte";
   import PersonHoursView from "./ui/PersonHoursView.svelte";
   import { solverRun, abortRun } from "./solver/solverLog";
 
@@ -23,12 +23,12 @@
   const run = $derived($solverRun);
   const solving = $derived(run.running);
 
-  type Tab = "overview" | "people" | "shifts" | "ledger";
+  type Tab = "overview" | "people" | "shifts" | "rota";
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "people", label: "People" },
     { id: "shifts", label: "Shifts" },
-    { id: "ledger", label: "Rota" },
+    { id: "rota", label: "Rota" },
   ];
   let tab = $state<Tab>("overview");
 
@@ -233,7 +233,7 @@
   <p class="status">{status}</p>
 {/if}
 
-<main class="content" inert={solving && tab !== "ledger"}>
+<main class="content" inert={solving && tab !== "rota"}>
   {#if tab === "overview"}
     <div class="view">
       <section class="intro">
@@ -261,6 +261,13 @@
               The flip side: <strong>nothing is saved for you.</strong> Remember to
               <em>Save .json</em> regularly to keep your work — closing the tab or
               clearing site data will discard anything you haven't exported.
+            </span>
+          </li>
+          <li>
+            <span class="fact-icon" aria-hidden="true">🐙</span>
+            <span>
+              Rotatool is open source. Browse the code, report a bug or contribute on
+              <a href="https://github.com/ASFaust/rotatool" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </span>
           </li>
         </ul>
@@ -314,7 +321,7 @@
     {:else if shiftsTab === "shiftTypes"}
       <ShiftTypesView />
     {/if}
-  {:else if tab === "ledger"}
+  {:else if tab === "rota"}
     <nav class="subtabs">
       {#each rotaTabs as rt}
         <button class="subtab" class:active={rotaTab === rt.id} onclick={() => (rotaTab = rt.id)}>{rt.label}</button>
@@ -323,7 +330,7 @@
     {#if rotaTab === "solver"}
       <SolverSettingsView />
     {:else}
-      <LedgerView mode={rotaTab} />
+      <RotaView mode={rotaTab} />
     {/if}
   {/if}
 </main>

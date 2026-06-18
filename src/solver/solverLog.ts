@@ -3,8 +3,8 @@
  * in-flight) HiGHS solve, plus the orchestration that drives a run.
  *
  * The run lives here rather than in a component because the tabs unmount on
- * switch: if the Ledger view owned the timer/progress, leaving the tab would
- * lose them mid-solve. Both the Ledger tab (progress + abort) and the Solver
+ * switch: if the Rota view owned the timer/progress, leaving the tab would
+ * lose them mid-solve. Both the Rota tab (progress + abort) and the Solver
  * tab (full scrolling log) read this one store, and the run keeps going while
  * you browse elsewhere.
  *

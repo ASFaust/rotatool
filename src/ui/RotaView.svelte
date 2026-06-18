@@ -7,6 +7,7 @@
     instanceTemplates,
     clearAssignmentsInRange,
     removeShiftsInRange,
+    addShift,
     updateShift,
     removeShift,
     addRequirement,
@@ -16,12 +17,12 @@
     assignSlot,
     reconcileAvailability,
     isPersonAvailable,
-  } from "../model/ledger";
+  } from "../model/rota";
   import { personStartDate } from "../model/hours";
-  import { setLedgerView } from "../model/mutations";
+  import { setRotaRange } from "../model/mutations";
   import { formatDateTime } from "../util/dates";
   import { solverRun, runAssign } from "../solver/solverLog";
-  import { ledgerToCsv, ledgerToIcs, ledgerToPrintHtml } from "../persistence/export";
+  import { rotaToCsv, rotaToIcs, rotaToPrintHtml } from "../persistence/export";
 
   // --- view range (date-only strings) --------------------------------------
   function addDays(d: Date, n: number): Date {
@@ -37,16 +38,21 @@
     const p = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
+  /** Local "YYYY-MM-DDThh:mm:ss" — the timezone-free shape stored on shifts. */
+  function fmtLocalDateTime(d: Date): string {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${fmtDate(d)}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
   /** Inclusive day count of a date-only range [from, to]. */
   function inclusiveDays(from: string, to: string): number {
     return Math.round((parseDate(to).getTime() - parseDate(from).getTime()) / 86_400_000) + 1;
   }
 
-  // The *selected* range lives in the persisted dataset (appData.ledgerView), so
+  // The *selected* range lives in the persisted dataset (appData.rotaRange), so
   // it survives refreshes and travels with imported/example workbooks. It drives
   // Prefill / Assign / Clear / Delete and is highlighted in the timeline.
-  const rangeStart = $derived($appData.ledgerView.from);
-  const rangeEnd = $derived($appData.ledgerView.to);
+  const rangeStart = $derived($appData.rotaRange.from);
+  const rangeEnd = $derived($appData.rotaRange.to);
   const selFrom = $derived(parseDate(rangeStart));
   const selTo = $derived(addDays(parseDate(rangeEnd), 1)); // end day inclusive
 
@@ -74,12 +80,14 @@
 
   const HOUR_MS = 3_600_000;
   const LANE_H = 50;
+  const CHIP_MIN_W = 46; // chips never render narrower than this (keeps labels legible)
+  const CHIP_GAP = 2; // min horizontal gap between two chips sharing a lane
 
   // The *view window* is ephemeral browsing state, decoupled from the selected
   // range: windowStart + N days, shown filling the viewport (N=1 → max zoom-in,
   // large N → zoomed out). Arrows pan it; the "Show days" field sizes it.
-  let windowStart = $state(fmtDate(addDays(parseDate($appData.ledgerView.from), -1)));
-  let windowDays = $state(inclusiveDays($appData.ledgerView.from, $appData.ledgerView.to) + 2);
+  let windowStart = $state(fmtDate(addDays(parseDate($appData.rotaRange.from), -1)));
+  let windowDays = $state(inclusiveDays($appData.rotaRange.from, $appData.rotaRange.to) + 2);
 
   // Selecting a new range jumps the window to range ±1 day (and re-highlights).
   $effect(() => {
@@ -94,6 +102,104 @@
   }
   function setWindowDays(n: number) {
     windowDays = Math.max(1, Math.floor(n) || 1);
+  }
+
+  // Double-click an empty spot on the timeline to drop a new one-time shift,
+  // centered on the cursor (start = cursor − half the duration), snapped to the
+  // nearest hour, then open it for editing. Placement is coarse on purpose — the
+  // chip lands roughly under the cursor and the exact time is edited in the panel.
+  const NEW_SHIFT_MIN = 60;
+  function onTimelineDblClick(e: MouseEvent) {
+    if (solving) return;
+    if ((e.target as HTMLElement | null)?.closest(".block")) return; // hit an existing shift
+    if (pxPerHour <= 0) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const hours = (e.clientX - rect.left) / pxPerHour;
+    const when = new Date(domainStart.getTime() + hours * HOUR_MS - (NEW_SHIFT_MIN / 2) * 60_000);
+    if (when.getMinutes() >= 30) when.setHours(when.getHours() + 1);
+    when.setMinutes(0, 0, 0);
+    pulseLayoutAnim();
+    const id = addShift({ name: "New shift", start: fmtLocalDateTime(when), durationMinutes: NEW_SHIFT_MIN });
+    selectedId = id;
+    selectedPid = null;
+  }
+
+  // --- drag-to-move a block along the timeline -----------------------------
+  // Pointer-drag a block to change its start time. We only *preview* a pixel
+  // offset while dragging (no store writes), then commit one updateShift on
+  // release — so it doesn't spam undo history or re-pack lanes on every move.
+  // New start snaps to 1-minute granularity. Movement under DRAG_THRESHOLD px
+  // stays a plain click (select), so dragging never eats a click.
+  const DRAG_THRESHOLD = 3;
+  const LAYOUT_ANIM_MS = 180;
+  let tlDrag = $state<{ id: string; el: HTMLElement; startX: number; originMs: number; deltaMs: number; moved: boolean } | null>(null);
+
+  // Briefly enable CSS position transitions so the lane re-packing after a create
+  // or a drag-drop glides instead of snapping (otherwise a shift "teleports" into
+  // its greedy lane). Kept off the rest of the time so zoom/pan stay instant and
+  // live dragging follows the cursor without lag.
+  let animateLayout = $state(false);
+  let animateTimer: ReturnType<typeof setTimeout> | undefined;
+  function pulseLayoutAnim() {
+    animateLayout = true;
+    clearTimeout(animateTimer);
+    animateTimer = setTimeout(() => (animateLayout = false), LAYOUT_ANIM_MS + 40);
+  }
+  // The just-dropped block is FLIP-animated explicitly (below) rather than via the
+  // CSS pulse: a lone `top` change on the element you were dragging doesn't reliably
+  // fire a CSS transition, so we measure its before/after rect and animate the delta.
+  let flippingId = $state<string | null>(null);
+
+  function onBlockPointerDown(e: PointerEvent, s: Shift) {
+    if (solving || e.button !== 0) return;
+    // Select on grab so the detail panel shows (and live-updates) the shift you drag.
+    selectedId = s.id;
+    selectedPid = null;
+    tlDrag = {
+      id: s.id,
+      el: e.currentTarget as HTMLElement,
+      startX: e.clientX,
+      originMs: new Date(s.start).getTime(),
+      deltaMs: 0,
+      moved: false,
+    };
+  }
+  function onTimelinePointerMove(e: PointerEvent) {
+    if (!tlDrag || pxPerHour <= 0) return;
+    const dxPx = e.clientX - tlDrag.startX;
+    if (!tlDrag.moved && Math.abs(dxPx) < DRAG_THRESHOLD) return;
+    tlDrag.moved = true;
+    const rawMs = tlDrag.originMs + (dxPx / pxPerHour) * HOUR_MS;
+    tlDrag.deltaMs = Math.round(rawMs / 60_000) * 60_000 - tlDrag.originMs; // snap to the minute
+  }
+  async function onTimelinePointerUp() {
+    if (!tlDrag) return;
+    const d = tlDrag;
+    tlDrag = null;
+    if (!d.moved || d.deltaMs === 0) return;
+
+    const first = d.el.getBoundingClientRect(); // where the block sits on release
+    flippingId = d.id; // opt this block out of the CSS pulse; we FLIP it by hand
+    pulseLayoutAnim(); // glide the *other* blocks into their re-packed lanes
+    updateShift(d.id, { start: fmtLocalDateTime(new Date(d.originMs + d.deltaMs)) });
+
+    await tick(); // let the new lane/position render
+    const last = d.el.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    if (dx || dy) {
+      const anim = d.el.animate(
+        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+        { duration: LAYOUT_ANIM_MS, easing: "ease" },
+      );
+      anim.finished.catch(() => {}).finally(() => { if (flippingId === d.id) flippingId = null; });
+    } else {
+      flippingId = null;
+    }
+  }
+  /** Live preview offset (px) applied to the block currently being dragged. */
+  function dragOffsetPx(id: string): number {
+    return tlDrag?.id === id ? (tlDrag.deltaMs / HOUR_MS) * pxPerHour : 0;
   }
 
   /** Time (ms) to keep centered while zooming: the selected shift, else the viewport center. */
@@ -144,6 +250,11 @@
   });
 
   // Lay shifts onto lanes: greedy interval partitioning so overlaps stack.
+  // Crucially this packs by *rendered pixel extent*, not raw time — a chip has a
+  // minimum width, so two time-disjoint shifts can still collide visually when
+  // zoomed out. Left-to-right, each chip drops into the lowest lane whose last
+  // chip's right edge (plus a small gap) clears this chip's left edge. Because it
+  // keys off pxPerHour, lanes re-pack as you zoom.
   const layout = $derived.by(() => {
     const dStart = domainStart.getTime();
     const dEnd = domainEnd.getTime();
@@ -156,17 +267,17 @@
       .filter((b) => b.endMs > dStart && b.startMs < dEnd)
       .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
 
-    const laneEnds: number[] = [];
+    const laneRight: number[] = []; // px right-edge (incl. gap) of each lane's last chip
     return visible.map((b) => {
-      let lane = laneEnds.findIndex((end) => end <= b.startMs);
-      if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(b.endMs);
-      } else {
-        laneEnds[lane] = b.endMs;
-      }
       const left = ((b.startMs - dStart) / HOUR_MS) * pxPerHour;
-      const width = Math.max(46, (b.shift.durationMinutes / 60) * pxPerHour);
+      const width = Math.max(CHIP_MIN_W, (b.shift.durationMinutes / 60) * pxPerHour);
+      let lane = laneRight.findIndex((right) => right <= left);
+      if (lane === -1) {
+        lane = laneRight.length;
+        laneRight.push(left + width + CHIP_GAP);
+      } else {
+        laneRight[lane] = left + width + CHIP_GAP;
+      }
       // Break trails the shift from its actual end; the line is partly obscured by the block.
       const breakLeft = ((b.endMs - dStart) / HOUR_MS) * pxPerHour;
       const breakWidth = (b.shift.breakMinutes / 60) * pxPerHour;
@@ -415,19 +526,28 @@
     selectedPid = null;
   }
 
-  // Del / Backspace with a person's chip selected unassigns them from that shift.
+  // Del / Backspace: with a person's chip selected, unassign them from the shift;
+  // with a shift itself selected (no person), delete that shift.
   function onKeyDown(e: KeyboardEvent) {
     if (e.key !== "Delete" && e.key !== "Backspace") return;
     const t = e.target as HTMLElement | null;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-    if (!selectedId || !selectedPid) return;
+    if (!selectedId) return;
     const s = $appData.shifts.find((x) => x.id === selectedId);
-    const at = s && findSlot(s, selectedPid);
-    if (s && at) {
-      e.preventDefault();
-      assignSlot(s.id, at.ri, at.si, null);
-      selectedPid = null;
+    if (!s) return;
+    if (selectedPid) {
+      const at = findSlot(s, selectedPid);
+      if (at) {
+        e.preventDefault();
+        assignSlot(s.id, at.ri, at.si, null);
+        selectedPid = null;
+      }
+      return;
     }
+    if (solving) return; // editing is locked while solving
+    e.preventDefault();
+    removeShift(s.id);
+    selectedId = null;
   }
 
   // --- fill state -----------------------------------------------------------
@@ -452,6 +572,13 @@
 
   // --- selected shift helpers ----------------------------------------------
   const selected = $derived($appData.shifts.find((s) => s.id === selectedId) ?? null);
+  // Start to display in the detail panel: the live (uncommitted) drag position
+  // while dragging the selected block, else the stored start.
+  const selectedStart = $derived(
+    selected && tlDrag?.id === selected.id && tlDrag.moved
+      ? fmtLocalDateTime(new Date(tlDrag.originMs + tlDrag.deltaMs))
+      : (selected?.start ?? ""),
+  );
   const attrName = (id: string) => $appData.attributes.find((a) => a.id === id)?.name ?? "?";
   const personName = (id: string) => $appData.persons.find((p) => p.id === id)?.name ?? "?";
 
@@ -518,39 +645,46 @@
   }
   function doExportCsv() {
     if ($appData.shifts.length === 0) { status = "Nothing to export — no shifts."; return; }
-    download("rota.csv", ledgerToCsv($appData), "text/csv");
+    download("rota.csv", rotaToCsv($appData), "text/csv");
     status = "Exported rota.csv.";
   }
   function doExportIcs() {
     if ($appData.shifts.length === 0) { status = "Nothing to export — no shifts."; return; }
-    download("rota.ics", ledgerToIcs($appData), "text/calendar");
+    download("rota.ics", rotaToIcs($appData), "text/calendar");
     status = "Exported rota.ics.";
   }
   function doPrint() {
     if ($appData.shifts.length === 0) { status = "Nothing to print — no shifts."; return; }
     const w = window.open("", "_blank");
     if (!w) { status = "Print blocked — allow popups."; return; }
-    w.document.write(ledgerToPrintHtml($appData));
+    w.document.write(rotaToPrintHtml($appData));
     w.document.close();
     w.focus();
     w.print();
   }
 </script>
 
-<svelte:window ondragover={onDragMove} onkeydown={onKeyDown} onclick={onBackgroundClick} />
+<svelte:window
+  ondragover={onDragMove}
+  onkeydown={onKeyDown}
+  onclick={onBackgroundClick}
+  onpointermove={onTimelinePointerMove}
+  onpointerup={onTimelinePointerUp}
+/>
 
 <div class="view wide">
-  <h2>Ledger</h2>
+  <h2>Rota</h2>
   <p class="hint">
-    The concrete, dated timeline. <strong>Prefill</strong> instances your repeating templates into
-    this range (empty). Adjust shifts and hand-assign people, then <strong>Assign people</strong>
-    runs the solver to fill the remaining open slots. Block color shows fill: red = unfilled, amber
-    = partial, green = full. Block width ∝ duration; overlaps stack. The selected range is shaded;
-    browse freely with the arrows and the “Show days” field below.
+    The concrete, dated timeline. <strong>Place shifts</strong> instances your repeating templates
+    into this range (empty); double-click an empty spot on the timeline to add a one-time shift.
+    Adjust shifts and hand-assign people, then <strong>Assign people</strong> runs the solver to fill
+    the remaining open slots. Block color shows fill: red = unfilled, amber = partial, green = full.
+    Block width ∝ duration; overlaps stack. The selected range is shaded; browse freely with the
+    arrows and the “Show days” field below.
   </p>
 
   <div class="row" style="gap: 16px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap;">
-    <DateRangePicker start={rangeStart} end={rangeEnd} onChange={setLedgerView} />
+    <DateRangePicker start={rangeStart} end={rangeEnd} onChange={setRotaRange} />
     <button class="btn" onclick={doPrefill} disabled={solving}>Place shifts</button>
     <button class="btn" onclick={doAssign} disabled={solving}>Assign people</button>
     <button class="btn ghost" onclick={doClear} disabled={solving}>Clear assignments</button>
@@ -622,11 +756,12 @@
             </div>
           {/each}
         </div>
-        <div class="lanes" style="height: {laneCount * LANE_H}px; width: {totalWidth}px;">
+        <div class="lanes" style="height: {laneCount * LANE_H}px; width: {totalWidth}px;" ondblclick={onTimelineDblClick} role="presentation">
           {#each layout as b (b.shift.id)}
             {#if b.breakWidth > 0}
               <div
                 class="break-line"
+                class:animated={animateLayout}
                 style="left: {b.breakLeft}px; width: {b.breakWidth}px; top: {b.lane * LANE_H + LANE_H / 2}px;"
                 title="Break: {b.shift.breakMinutes} min"
               ></div>
@@ -637,16 +772,20 @@
             <button
               class="block {fillClass(b.shift)}"
               class:selected={b.shift.id === selectedId}
-              style="left: {b.left}px; width: {b.width}px; top: {b.lane * LANE_H}px;"
+              class:moving={tlDrag?.id === b.shift.id && tlDrag.moved}
+              class:flipping={flippingId === b.shift.id}
+              class:animated={animateLayout && flippingId !== b.shift.id}
+              style="left: {b.left + dragOffsetPx(b.shift.id)}px; width: {b.width}px; top: {b.lane * LANE_H}px;"
+              onpointerdown={(e) => onBlockPointerDown(e, b.shift)}
               onclick={() => { selectedId = b.shift.id; selectedPid = null; }}
-              title={b.shift.name}
+              title="{b.shift.name} — drag to move"
             >
               <span class="block-title">{b.shift.name}</span>
               <span class="block-people">{f.filled}/{f.total}</span>
             </button>
           {/each}
           {#if layout.length === 0}
-            <p class="empty" style="padding: 16px;">No shifts in this range. Use “Place shifts”, or add one-time shifts in the Shifts tab.</p>
+            <p class="empty" style="padding: 16px;">No shifts in this range. Use “Place shifts”, double-click here to add a one-time shift, or add them on the Shifts tab.</p>
           {/if}
         </div>
       </div>
@@ -770,7 +909,7 @@
       <div class="row" style="gap: 16px; margin-bottom: 12px; flex-wrap: wrap;">
         <div class="field">
           <span class="cap">Start</span>
-          <input type="datetime-local" value={toInput(selected.start)} onchange={(e) => updateShift(selected.id, { start: fromInput(e.currentTarget.value) })} />
+          <input type="datetime-local" value={toInput(selectedStart)} onchange={(e) => updateShift(selected.id, { start: fromInput(e.currentTarget.value) })} />
         </div>
         <div class="field">
           <span class="cap">Duration (minutes)</span>
@@ -898,7 +1037,7 @@
   .axis { position: relative; height: 28px; border-bottom: 1px solid var(--border); }
   .day-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); box-sizing: border-box; }
   .day-label { font-size: 12px; color: var(--text); padding: 4px 6px; display: inline-block; white-space: nowrap; }
-  .lanes { position: relative; }
+  .lanes { position: relative; min-height: 120px; }
   .break-line {
     position: absolute; height: 0; transform: translateY(-50%);
     border-top: 2px dashed var(--text); opacity: 0.4; pointer-events: none;
@@ -906,11 +1045,18 @@
   .block {
     position: absolute; height: 44px; box-sizing: border-box; margin: 3px 0; padding: 4px 6px;
     border: 2px solid var(--accent-border); background: var(--accent-bg); border-radius: 5px;
-    cursor: pointer; overflow: hidden; text-align: left; display: flex; flex-direction: column;
+    cursor: grab; touch-action: none; overflow: hidden; text-align: left; display: flex; flex-direction: column;
     justify-content: space-between; font: inherit; line-height: 1.2;
   }
   .block:hover { box-shadow: var(--shadow); }
   .block.selected { outline: 2px solid var(--accent); }
+  /* While being dragged: lift above neighbours and switch to a grabbing cursor. */
+  .block.moving { cursor: grabbing; z-index: 2; box-shadow: var(--shadow); }
+  /* Briefly enabled (after a create/drop) so re-laning glides; off during zoom/pan. */
+  .block.animated:not(.moving) { transition: top 0.18s ease, left 0.18s ease; }
+  /* The just-dropped block rides above its neighbours while its FLIP plays out. */
+  .block.flipping { z-index: 2; }
+  .break-line.animated { transition: top 0.18s ease, left 0.18s ease, width 0.18s ease; }
   .block.unfilled { border-color: #b02a1c; background: rgba(176, 42, 28, 0.22); }
   .block.partial { border-color: #a06f00; background: rgba(160, 111, 0, 0.24); }
   .block.filled { border-color: #1f8049; background: rgba(31, 128, 73, 0.22); }

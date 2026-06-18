@@ -79,7 +79,7 @@
       {:else if run.status}
         <span class="dot done"></span><span>{run.status}{runSeconds ? ` — ${runSeconds}s` : ""}</span>
       {:else}
-        <span class="dot idle"></span><span>Idle — run “Assign people” on the Ledger tab.</span>
+        <span class="dot idle"></span><span>Idle — run “Assign people” on the Rota tab.</span>
       {/if}
       {#if run.gap !== null}<span class="gap">gap {(run.gap * 100).toFixed(1)}%</span>{/if}
     </div>
@@ -155,7 +155,7 @@
         </label>
       {/if}
       {#if s.fairness.useHistory}
-        <p class="sub">Balance people by <em>utilization</em> — hours worked (Person Hours seed + tracked ledger) ÷ the hours expected over the time they've been available, at their weekly target. A pre-pass turns each person's pace into a <em>target number of hours to assign this window</em>, and the solver is penalized per hour it lands off target. <em>Balance everyone</em> pulls each person toward their own target; <em>Squeeze the worst</em> only shrinks the single largest miss. The <em>catch-up cap</em> limits how many make-up hours a behind person gets in one window, so a backlog isn't dumped at once. <em>Per shift type</em> balances each type on its own, so the mix is fair too — not just the totals. People without a start date and a weekly target are excluded.</p>
+        <p class="sub">Balance people by <em>utilization</em> — hours worked (Person Hours seed + tracked rota) ÷ the hours expected over the time they've been available, at their weekly target. A pre-pass turns each person's pace into a <em>target number of hours to assign this window</em>, and the solver is penalized per hour it lands off target. <em>Balance everyone</em> pulls each person toward their own target; <em>Squeeze the worst</em> only shrinks the single largest miss. The <em>catch-up cap</em> limits how many make-up hours a behind person gets in one window, so a backlog isn't dumped at once. <em>Per shift type</em> balances each type on its own, so the mix is fair too — not just the totals. People without a start date and a weekly target are excluded.</p>
         {#if s.fairness.enabled && fairnessExcluded.length > 0}
           <p class="warn">Excluded (no start date or no weekly target): {fairnessExcluded.map((p) => p.name).join(", ")}</p>
         {/if}

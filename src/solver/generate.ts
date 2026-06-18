@@ -27,7 +27,7 @@ export async function assignPeople(
   onLog?: (line: string) => void,
 ): Promise<AssignSummary> {
   const data = getAppData();
-  // Pass the full ledger: buildAssignmentModel selects the window itself (seats
+  // Pass the full rota: buildAssignmentModel selects the window itself (seats
   // from shifts starting in it) and pulls neighbouring shifts in as a bounded
   // halo of busy time so cross-boundary overlaps/breaks/peak are respected.
   const ctx = buildAssignmentModel(data, data.shifts, rangeStart, rangeEnd);

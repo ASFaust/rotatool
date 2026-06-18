@@ -24,7 +24,7 @@
 import { z } from "zod";
 
 /** Bumped whenever the persisted shape changes. */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 /** Non-empty identifier string (internal id or a name reference). */
 const id = z.string().min(1);
@@ -97,7 +97,7 @@ export const TemplateRequirementSchema = z.object({
   attributeIds: z.array(id).default([]),
   count: z.number().int().positive(),
   required: z.boolean().default(false),
-  /** Optional role name for this group of slots (e.g. "MS leader"), shown on grid chips. */
+  /** Optional role name for this group of slots (e.g. "survey leader"), shown on grid chips. */
   label: z.string().optional(),
 });
 
@@ -111,7 +111,7 @@ export const ShiftRequirementSchema = z.object({
   attributeIds: z.array(id).default([]),
   required: z.boolean().default(false),
   slots: z.array(z.string().nullable()).default([]),
-  /** Optional role name for this group of slots (e.g. "MS leader"), shown on grid chips. */
+  /** Optional role name for this group of slots (e.g. "survey leader"), shown on grid chips. */
   label: z.string().optional(),
 });
 
@@ -213,7 +213,7 @@ export const ShiftSchema = z.object({
  * Manually-entered hours a person had already worked in a shift type *before*
  * the rota was tracked here — the "shift memory" for orgs adopting mid-season.
  * Sparse: only entered (non-zero) rows are stored. The Person Hours tab adds
- * this to hours *derived* from the tracked ledger to get each person's total.
+ * this to hours *derived* from the tracked rota to get each person's total.
  */
 export const PersonHoursSchema = z.object({
   personId: id,
@@ -288,17 +288,17 @@ export const SolverSettingsSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// Ledger view (persisted timeline range — the "from"/"to" of the Ledger tab)
+// Rota range (persisted date window — the "from"/"to" the Rota tab shows)
 // ---------------------------------------------------------------------------
 
-/** The date-only window the Ledger timeline shows. `to` is inclusive. */
-export const LedgerViewSchema = z.object({
+/** The date-only window the Rota (timeline / grid) shows. `to` is inclusive. */
+export const RotaRangeSchema = z.object({
   from: isoDate,
   to: isoDate,
 });
 
 /** Default window: today through two weeks out (matches the empty-workbook view). */
-function defaultLedgerView(): { from: string; to: string } {
+function defaultRotaRange(): { from: string; to: string } {
   const pad2 = (n: number) => String(n).padStart(2, "0");
   const fmt = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   const today = new Date();
@@ -330,8 +330,8 @@ export const AppDataSchema = z.object({
   shifts: z.array(ShiftSchema).default([]),
   /** Manually-seeded hours per person per type (mid-season "shift memory"). */
   personHours: z.array(PersonHoursSchema).default([]),
-  /** Persisted Ledger timeline window. */
-  ledgerView: LedgerViewSchema.default(defaultLedgerView),
+  /** Persisted Rota date window (shared by the timeline + grid views). */
+  rotaRange: RotaRangeSchema.default(defaultRotaRange),
   /** Persisted settings for the Person Hours seed-autofill tool. */
   prefillSettings: PrefillSettingsSchema.prefault({}),
 });

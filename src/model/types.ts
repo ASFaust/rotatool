@@ -18,7 +18,7 @@ import type {
   ShiftRequirementSchema,
   PersonHoursSchema,
   SolverSettingsSchema,
-  LedgerViewSchema,
+  RotaRangeSchema,
   PrefillSettingsSchema,
   MetaSchema,
   AppDataSchema,
@@ -37,7 +37,7 @@ export type Shift = z.infer<typeof ShiftSchema>;
 export type ShiftRequirement = z.infer<typeof ShiftRequirementSchema>;
 export type PersonHours = z.infer<typeof PersonHoursSchema>;
 export type SolverSettings = z.infer<typeof SolverSettingsSchema>;
-export type LedgerView = z.infer<typeof LedgerViewSchema>;
+export type RotaRange = z.infer<typeof RotaRangeSchema>;
 export type PrefillSettings = z.infer<typeof PrefillSettingsSchema>;
 export type Meta = z.infer<typeof MetaSchema>;
 export type AppData = z.infer<typeof AppDataSchema>;

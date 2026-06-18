@@ -1,6 +1,6 @@
 /**
  * hours.ts — derive how many hours each person has worked per shift type from
- * the tracked ledger (the concrete `shifts`), the counterpart to the manually
+ * the tracked rota (the concrete `shifts`), the counterpart to the manually
  * seeded `personHours`. The Person Hours tab shows both side by side and sums
  * them; the optimizer will later consume the totals for fairness/distribution.
  */
@@ -129,7 +129,7 @@ export function availableWeeks(data: AppData, personId: string, from: Date, to: 
  * diagnostic. For each person:
  *
  *   denom_p   = availableWeeks(start_p → horizon) × weeklyHours_p   (expected hours)
- *   worked_pt = seed (personHours) + ledger-derived hours, measured through horizon
+ *   worked_pt = seed (personHours) + rota-derived hours, measured through horizon
  *   U_pt      = worked_pt / denom_p   (dimensionless, comparable across people)
  *
  * `denom_p` is one shared denominator across all shift types, so per-type `U_pt`
@@ -146,7 +146,7 @@ export interface PersonUtilization {
   eligible: boolean;
   /** Expected hours over the person's tenure through `horizon`; 0 when ineligible. */
   denom: number;
-  /** typeId -> already-worked hours (seed + ledger-derived through horizon). */
+  /** typeId -> already-worked hours (seed + rota-derived through horizon). */
   workedByType: Map<string, number>;
   workedTotal: number;
 }
@@ -190,7 +190,7 @@ export function computeUtilization(data: AppData, horizon: Date): Map<string, Pe
  * `weeks_p` is the **same availability-aware expected-hours** measure the fairness
  * pre-pass and the Person Hours pace use (`computeUtilization`'s `denom`), over an
  * inclusive end-of-day endpoint — so a freshly-autofilled roster (no tracked
- * ledger hours yet) reads an even ~100% pace for everyone, and leave doesn't
+ * rota hours yet) reads an even ~100% pace for everyone, and leave doesn't
  * inflate the seed. People lacking an availability start or a positive weekly
  * target are skipped; types with weight ≤ 0 get nothing. Returns the full
  * replacement `personHours` (only non-zero rows, the sparse convention).

@@ -3,7 +3,7 @@
   import { setPersonHours, setAllPersonHours, updatePrefillSettings } from "../model/mutations";
   import { computeDerivedHours, computePrefillSeed, computeUtilization, personStartDate, weeklyHours } from "../model/hours";
 
-  // personId -> typeId -> hours derived from the tracked ledger.
+  // personId -> typeId -> hours derived from the tracked rota.
   const derivedHours = $derived(computeDerivedHours($appData));
   // "personId|typeId" -> manually-entered hours.
   const manual = $derived(
@@ -14,7 +14,7 @@
 
   // Utilization (pace) diagnostic — read-only. Same horizon as the solver's
   // window end: the inclusive `to` day, so it lines up with what fairness sees.
-  const horizon = $derived(new Date(new Date(`${$appData.ledgerView.to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000));
+  const horizon = $derived(new Date(new Date(`${$appData.rotaRange.to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000));
   const util = $derived(computeUtilization($appData, horizon));
   // Overall pace U_p = worked ÷ expected hours, as a percent; null when the
   // person has no start date or weekly target (excluded from fairness).
@@ -56,7 +56,7 @@
   // and splits it across shift types by `weights`, overwriting all seed cells.
   // Settings live in the persisted workbook (appData.prefillSettings).
   // The seed is *pre-window history* — hours worked before the planning window
-  // begins — so the autofill end date defaults to the day before the Ledger
+  // begins — so the autofill end date defaults to the day before the Rota
   // `from` (i.e. credit hours right up to, but not into, the range being planned).
   function dayBefore(iso: string): string {
     const d = new Date(`${iso}T00:00:00`);
@@ -64,7 +64,7 @@
     const p = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
-  const endDate = $derived($appData.prefillSettings.endDate ?? dayBefore($appData.ledgerView.from));
+  const endDate = $derived($appData.prefillSettings.endDate ?? dayBefore($appData.rotaRange.from));
   const weightOf = (typeId: string) => $appData.prefillSettings.weights[typeId] ?? 1;
 
   // Active people we can't pro-rate (no availability start or no hours target).
@@ -89,11 +89,11 @@
   <p class="hint">
     Hours each person has already worked, per shift type. The <strong>seed</strong> column is
     editable — use it to record hours worked <em>before</em> you started tracking shifts here
-    (e.g. when adopting mid-season). <strong>Ledger</strong> is derived automatically from the
-    assigned shifts in this workbook. The <strong>total</strong> (seed + ledger) is what later
+    (e.g. when adopting mid-season). <strong>Rota</strong> is derived automatically from the
+    assigned shifts in this workbook. The <strong>total</strong> (seed + rota) is what later
     feeds fairness and distribution objectives. <strong>Pace</strong> is each person's utilization —
     total hours ÷ the hours expected over the time they've been available (at their weekly target),
-    through the Ledger end date; hover for the per-type split. It's the signal the fairness objective
+    through the Rota end date; hover for the per-type split. It's the signal the fairness objective
     balances; “—” means no start date or weekly target, so they're excluded.
   </p>
 
@@ -114,9 +114,9 @@
           <tr class="legend">
             <th></th>
             {#each $appData.shiftTypes as st (st.id)}
-              <th><span class="seed-l">seed</span> + ledger = total</th>
+              <th><span class="seed-l">seed</span> + rota = total</th>
             {/each}
-            <th class="total-col">seed + ledger</th>
+            <th class="total-col">seed + rota</th>
             <th class="pace-col">worked ÷ expected</th>
           </tr>
         </thead>
@@ -140,7 +140,7 @@
                     />
                     <span class="calc">
                       <span class="led" title="Derived from assigned shifts">+{round1(d)}</span>
-                      <span class="tot" title="Seed + ledger">= {round1(m + d)}</span>
+                      <span class="tot" title="Seed + rota">= {round1(m + d)}</span>
                     </span>
                   </div>
                 </td>
@@ -173,7 +173,7 @@
         Fairly prefill the seed columns: each active person is credited the hours they'd have
         worked from their start date (earliest availability) through the end date below, at their
         weekly hours target, split across shift types by the weights. The end date defaults to the
-        day before the Ledger range — the seed is the <em>history before</em> the window you're about
+        day before the Rota range — the seed is the <em>history before</em> the window you're about
         to plan. This <strong>overwrites</strong> all seed values.
       </p>
       <div class="controls">

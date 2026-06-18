@@ -137,6 +137,21 @@ function v7ToV8(raw: Obj): Obj {
   };
 }
 
+/**
+ * v8 → v9: the timeline-of-record was renamed from "ledger" to "rota" throughout.
+ * The only persisted field affected is the saved date window, `ledgerView` →
+ * `rotaRange` (same `{from, to}` shape). Rename it if present; Zod backfills the
+ * default otherwise.
+ */
+function v8ToV9(raw: Obj): Obj {
+  const { ledgerView, ...rest } = raw;
+  return {
+    ...rest,
+    ...(isObj(ledgerView) ? { rotaRange: ledgerView } : {}),
+    meta: { ...(isObj(raw.meta) ? raw.meta : {}), schemaVersion: 9 },
+  };
+}
+
 /** Ordered migration steps; index by the *source* version they upgrade from. */
 const STEPS: Record<number, (raw: Obj) => Obj> = {
   3: v3ToV4,
@@ -144,6 +159,7 @@ const STEPS: Record<number, (raw: Obj) => Obj> = {
   5: v5ToV6,
   6: v6ToV7,
   7: v7ToV8,
+  8: v8ToV9,
 };
 
 /**

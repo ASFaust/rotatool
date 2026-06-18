@@ -1,5 +1,5 @@
 /**
- * export.ts — render the Ledger (the rota of record) into shareable formats:
+ * export.ts — render the Rota (the timeline of record) into shareable formats:
  *  - CSV: one row per assignment (blank person for an unfilled shift), for
  *    spreadsheets / payroll.
  *  - iCalendar (.ics): one VEVENT per shift, assigned people in the description,
@@ -49,7 +49,7 @@ function csvCell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-export function ledgerToCsv(data: AppData): string {
+export function rotaToCsv(data: AppData): string {
   const header = ["Shift", "Type", "Start", "End", "DurationMinutes", "Person"];
   const rows: string[][] = [];
   for (const s of sortedShifts(data)) {
@@ -93,7 +93,7 @@ function icsFold(line: string): string {
   return parts.join("\r\n");
 }
 
-export function ledgerToIcs(data: AppData, now: Date = new Date()): string {
+export function rotaToIcs(data: AppData, now: Date = new Date()): string {
   const stamp =
     `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}` +
     `T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
@@ -137,7 +137,7 @@ function htmlEscape(text: string): string {
 const fmtWhen = (iso: string) => formatDateTime(iso, { weekday: true });
 
 /** A standalone HTML document of the rota, for printing from a popup window. */
-export function ledgerToPrintHtml(data: AppData): string {
+export function rotaToPrintHtml(data: AppData): string {
   const rows = sortedShifts(data)
     .map((s) => {
       const people = assignmentsFor(data, s);

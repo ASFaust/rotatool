@@ -7,7 +7,7 @@
 
   // Keep the window ordered: if an edit would invert it (from > to), drag the
   // other endpoint along so the range never collapses. An inverted range makes
-  // the Ledger silently empty (occurrences() bails when rangeEnd <= rangeStart).
+  // the Rota silently empty (occurrences() bails when rangeEnd <= rangeStart).
   function changeFrom(from: string) {
     onChange(from, from > end ? from : end);
   }

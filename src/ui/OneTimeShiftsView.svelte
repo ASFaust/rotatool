@@ -8,7 +8,7 @@
     updateRequirement,
     removeRequirement,
     setSlotCount,
-  } from "../model/ledger";
+  } from "../model/rota";
 
   let newName = $state("");
 

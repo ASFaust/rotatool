@@ -1,6 +1,6 @@
 /**
- * ledger.ts — operations on the concrete, dated timeline of Shifts and the
- * people in their staffing slots.
+ * rota.ts — operations on the concrete, dated timeline of Shifts and the
+ * people in their staffing slots (the rota of record).
  *
  * A Shift's requirement slots are the solver boundary: a `null` slot is a
  * decision for the solver, a `personId` slot is fixed by hand. There is no
